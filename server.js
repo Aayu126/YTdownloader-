@@ -106,10 +106,9 @@ app.get('/api/hq-download', (req, res) => {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
         
-        // This flag helps prevent sending multiple responses if multiple errors occur
         let responseSent = false;
+        let ffmpegProcess;
         
-        // Helper function to handle and send errors cleanly
         const sendErrorResponse = (err) => {
             console.error('Download error:', err.message);
             if (!responseSent) {
@@ -132,31 +131,34 @@ app.get('/api/hq-download', (req, res) => {
             ...requestOptions
         });
         
-        // Handle stream errors
-        videoStream.on('error', sendErrorResponse);
-        audioStream.on('error', sendErrorResponse);
-
-        res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
-
-        let ffmpegProcess;
-        ffmpegProcess = ffmpeg()
-            .input(videoStream)
-            .videoCodec('copy')
-            .input(audioStream)
-            .audioCodec('copy')
-            .format('mp4')
-            .on('error', (err) => {
-                // If FFmpeg itself crashes, we handle it here
-                sendErrorResponse(err);
+        // Use a Promise to wait for both streams to become readable
+        Promise.all([
+            new Promise((resolve, reject) => {
+                videoStream.on('readable', resolve).on('error', reject);
+            }),
+            new Promise((resolve, reject) => {
+                audioStream.on('readable', resolve).on('error', reject);
             })
-            .pipe(res, { end: true });
-            
-        // Clean up resources if the client disconnects prematurely
-        res.once('close', () => {
-            if (ffmpegProcess && !ffmpegProcess.killed) {
-                ffmpegProcess.kill('SIGKILL');
-            }
-        });
+        ]).then(() => {
+            res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
+
+            ffmpegProcess = ffmpeg()
+                .input(videoStream)
+                .videoCodec('copy')
+                .input(audioStream)
+                .audioCodec('copy')
+                .format('mp4')
+                .on('error', (err) => {
+                    sendErrorResponse(err);
+                })
+                .pipe(res, { end: true });
+                
+            res.once('close', () => {
+                if (ffmpegProcess && !ffmpegProcess.killed) {
+                    ffmpegProcess.kill('SIGKILL');
+                }
+            });
+        }).catch(sendErrorResponse);
 
     } catch (error) {
         console.error('Error in hq-download route:', error);
