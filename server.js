@@ -4,6 +4,8 @@ import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 // Load environment variables from a .env file
@@ -11,20 +13,15 @@ dotenv.config();
 
 // Create an Express application
 const app = express();
-// Enable CORS to allow requests from your frontend
 app.use(cors());
 
-// Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
-// Resolve the directory name to be used for serving static files
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static files from the current directory (where YT.html, Script.js, and styles.css are located)
 app.use(express.static(__dirname));
 
-// Define a user agent to make requests appear like they're from a browser
 const requestOptions = {
     requestOptions: {
         headers: {
@@ -33,62 +30,39 @@ const requestOptions = {
     }
 };
 
-// Endpoint to get video information
+// Get video info
 app.get('/api/videoInfo', async (req, res) => {
     try {
         const { url } = req.query;
-        if (!url) {
-            return res.status(400).json({ error: 'Please provide a YouTube URL' });
-        }
+        if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
         
         const cleanUrl = url.split('&')[0];
+        if (!ytdl.validateURL(cleanUrl)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
-        if (!ytdl.validateURL(cleanUrl)) {
-            return res.status(400).json({ error: 'Invalid YouTube URL' });
-        }
-
-        // Pass the request options to ytdl.getInfo
         const info = await ytdl.getInfo(cleanUrl, requestOptions);
-        const formats = info.formats;
-
         res.status(200).json({
             videoDetails: info.videoDetails,
-            formats: formats
+            formats: info.formats
         });
     } catch (error) {
-        // Log the full error for server-side debugging
         console.error('Error fetching video info:', error);
-
-        // Send a more informative message to the frontend
-        res.status(500).json({ error: error.message || 'Failed to fetch video information. It might be private, restricted, or an invalid link.' });
+        res.status(500).json({ error: error.message || 'Failed to fetch video information.' });
     }
 });
 
-// Endpoint to download a standard video (combined audio/video stream)
+// Standard download
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
+        if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video ID' });
 
         res.header('Content-Disposition', `attachment; filename="video.mp4"`);
-
-        const videoStream = ytdl(videoUrl, {
-            filter: format => format.itag == itag,
-            ...requestOptions
-        });
-
-        // Add an error handler to the stream
+        const videoStream = ytdl(videoUrl, { filter: f => f.itag == itag, ...requestOptions });
         videoStream.on('error', (err) => {
             console.error('ytdl stream error:', err);
-            if (!res.headersSent) {
-                return res.status(500).json({ error: err.message || 'Failed to download video stream.' });
-            }
+            if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to download video stream.' });
         });
-
         videoStream.pipe(res);
     } catch (error) {
         console.error('Error downloading video:', error);
@@ -96,127 +70,67 @@ app.get('/api/download', (req, res) => {
     }
 });
 
-// Endpoint to download a high-quality video by combining video and audio streams
-app.get('/api/hq-download', (req, res) => {
+// High-quality download (merges first, then sends)
+app.get('/api/hq-download', async (req, res) => {
     try {
         const { videoId, itag } = req.query;
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video ID' });
 
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
-        
-        let responseSent = false;
-        let ffmpegProcess;
+        const tempPath = path.join(os.tmpdir(), `${videoId}-${Date.now()}.mp4`);
+        const videoStream = ytdl(videoUrl, { filter: f => f.itag == itag, ...requestOptions });
+        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio', ...requestOptions });
 
-        const sendErrorResponse = (err) => {
-            console.error('Download error:', err.message);
-            if (!responseSent) {
-                res.status(500).json({ error: err.message || 'Failed to download the video.' });
-                responseSent = true;
-            }
-            if (ffmpegProcess) {
-                ffmpegProcess.kill('SIGKILL');
-            }
-        };
+        ffmpeg()
+            .input(videoStream)
+            .videoCodec('copy')
+            .input(audioStream)
+            .audioCodec('copy')
+            .format('mp4')
+            .save(tempPath)
+            .on('start', () => {
+                console.log(`Merging video for ${videoId}...`);
+            })
+            .on('end', () => {
+                console.log(`Merge complete: ${tempPath}`);
+                res.download(tempPath, 'high-quality-video.mp4', (err) => {
+                    fs.unlink(tempPath, () => {}); // cleanup
+                    if (err) console.error('Error sending file:', err);
+                });
+            })
+            .on('error', (err) => {
+                console.error('FFmpeg error:', err);
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                if (!res.headersSent) res.status(500).json({ error: 'FFmpeg processing failed: ' + err.message });
+            });
 
-        const videoStream = ytdl(videoUrl, {
-            filter: format => format.itag == itag,
-            ...requestOptions
-        });
-
-        const audioStream = ytdl(videoUrl, {
-            filter: 'audioonly',
-            quality: 'highestaudio',
-            ...requestOptions
-        });
-
-        // Set up error handlers to kill FFmpeg and send a response immediately if a stream fails
-        videoStream.on('error', sendErrorResponse);
-        audioStream.on('error', sendErrorResponse);
-
-        // Check for stream errors before starting FFmpeg to prevent the process from crashing
-        if (videoStream.readable && audioStream.readable) {
-            res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
-
-            ffmpegProcess = ffmpeg()
-                .input(videoStream)
-                .videoCodec('copy')
-                .input(audioStream)
-                .audioCodec('copy')
-                .format('mp4')
-                .on('error', (err) => {
-                    if (!responseSent) {
-                        res.status(500).json({ error: 'FFmpeg processing failed: ' + err.message });
-                        responseSent = true;
-                    }
-                })
-                .pipe(res, { end: true });
-        } else {
-            // One of the streams is not ready, trigger the error handler
-            sendErrorResponse(new Error('One or more video/audio streams failed to start.'));
-        }
-
-        // Clean up resources if the client disconnects prematurely
-        res.once('close', () => {
-            if (ffmpegProcess && !ffmpegProcess.killed) {
-                ffmpegProcess.kill('SIGKILL');
-            }
-        });
-        
     } catch (error) {
         console.error('Error in hq-download route:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download video.' });
-        }
+        if (!res.headersSent) res.status(500).json({ error: error.message || 'Failed to download video.' });
     }
 });
 
-// Endpoint to download audio
+// Audio download
 app.get('/api/audio', (req, res) => {
     try {
         const { videoId } = req.query;
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
-        
-        let responseSent = false;
+        if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video ID' });
 
         res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
-        
-        const audioStream = ytdl(videoUrl, {
-            filter: 'audioonly',
-            quality: 'highestaudio',
-            ...requestOptions
-        });
-        
-        // Add an error handler to the stream
+        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio', ...requestOptions });
         audioStream.on('error', (err) => {
             console.error('ytdl stream error:', err);
-            if (!responseSent) {
-                return res.status(500).json({ error: err.message || 'Failed to download audio stream.' });
-                responseSent = true;
-            }
+            if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to download audio stream.' });
         });
-
         audioStream.pipe(res);
-        
-        // Clean up if client disconnects
-        res.once('close', () => {
-            audioStream.destroy();
-        });
-
+        res.once('close', () => audioStream.destroy());
     } catch (error) {
         console.error('Error downloading audio:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download audio.' });
-        }
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to download audio.' });
     }
 });
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
