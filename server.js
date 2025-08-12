@@ -46,8 +46,11 @@ app.get('/api/videoInfo', async (req, res) => {
             formats: formats
         });
     } catch (error) {
+        // Log the full error for server-side debugging
         console.error('Error fetching video info:', error);
-        res.status(500).json({ error: 'Failed to fetch video information. It might be private, restricted, or an invalid link.' });
+
+        // Send a more informative message to the frontend
+        res.status(500).json({ error: error.message || 'Failed to fetch video information. It might be private, restricted, or an invalid link.' });
     }
 });
 
