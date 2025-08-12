@@ -3,8 +3,8 @@ import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
-import path from 'path'; // Import the 'path' module
-import { fileURLToPath } from 'url'; // Import fileURLToPath to resolve the current directory
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Load environment variables from a .env file
 dotenv.config();
@@ -24,6 +24,15 @@ const __dirname = path.dirname(__filename);
 // Serve static files from the current directory (where YT.html, Script.js, and styles.css are located)
 app.use(express.static(__dirname));
 
+// Define a user agent to make requests appear like they're from a browser
+const requestOptions = {
+    requestOptions: {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+        }
+    }
+};
+
 // Endpoint to get video information
 app.get('/api/videoInfo', async (req, res) => {
     try {
@@ -38,7 +47,8 @@ app.get('/api/videoInfo', async (req, res) => {
             return res.status(400).json({ error: 'Invalid YouTube URL' });
         }
 
-        const info = await ytdl.getInfo(cleanUrl);
+        // Pass the request options to ytdl.getInfo
+        const info = await ytdl.getInfo(cleanUrl, requestOptions);
         const formats = info.formats;
 
         res.status(200).json({
@@ -66,8 +76,10 @@ app.get('/api/download', (req, res) => {
 
         res.header('Content-Disposition', `attachment; filename="video.mp4"`);
 
+        // Pass the request options to ytdl
         ytdl(videoUrl, {
-            filter: format => format.itag == itag
+            filter: format => format.itag == itag,
+            ...requestOptions
         }).pipe(res);
     } catch (error) {
         console.error('Error downloading video:', error);
@@ -85,13 +97,16 @@ app.get('/api/hq-download', (req, res) => {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
 
+        // Pass the request options to ytdl
         const videoStream = ytdl(videoUrl, {
-            filter: format => format.itag == itag
+            filter: format => format.itag == itag,
+            ...requestOptions
         });
 
         const audioStream = ytdl(videoUrl, {
             filter: 'audioonly',
-            quality: 'highestaudio'
+            quality: 'highestaudio',
+            ...requestOptions
         });
 
         res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
@@ -125,9 +140,11 @@ app.get('/api/audio', (req, res) => {
 
         res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
 
+        // Pass the request options to ytdl
         ytdl(videoUrl, {
             filter: 'audioonly',
-            quality: 'highestaudio'
+            quality: 'highestaudio',
+            ...requestOptions
         }).pipe(res);
     } catch (error) {
         console.error('Error downloading audio:', error);
