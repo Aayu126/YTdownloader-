@@ -76,11 +76,20 @@ app.get('/api/download', (req, res) => {
 
         res.header('Content-Disposition', `attachment; filename="video.mp4"`);
 
-        // Pass the request options to ytdl
-        ytdl(videoUrl, {
+        const videoStream = ytdl(videoUrl, {
             filter: format => format.itag == itag,
             ...requestOptions
-        }).pipe(res);
+        });
+
+        // Add an error handler to the stream
+        videoStream.on('error', (err) => {
+            console.error('ytdl stream error:', err);
+            if (!res.headersSent) {
+                return res.status(500).json({ error: err.message || 'Failed to download video stream.' });
+            }
+        });
+
+        videoStream.pipe(res);
     } catch (error) {
         console.error('Error downloading video:', error);
         res.status(500).json({ error: 'Failed to download video.' });
@@ -96,8 +105,19 @@ app.get('/api/hq-download', (req, res) => {
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
+        
+        // Flag to prevent sending multiple responses
+        let responseSent = false;
+        
+        // Error handler function for streams
+        const streamErrorHandler = (err) => {
+            console.error('ytdl stream error:', err);
+            if (!responseSent) {
+                res.status(500).json({ error: err.message || 'Failed to download stream for processing.' });
+                responseSent = true;
+            }
+        };
 
-        // Pass the request options to ytdl
         const videoStream = ytdl(videoUrl, {
             filter: format => format.itag == itag,
             ...requestOptions
@@ -109,6 +129,10 @@ app.get('/api/hq-download', (req, res) => {
             ...requestOptions
         });
 
+        // Attach error handlers to both streams
+        videoStream.on('error', streamErrorHandler);
+        audioStream.on('error', streamErrorHandler);
+
         res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
 
         ffmpeg()
@@ -119,12 +143,18 @@ app.get('/api/hq-download', (req, res) => {
             .format('mp4')
             .on('error', (err) => {
                 console.error('ffmpeg error:', err);
-                res.status(500).send('Error during video processing');
+                if (!responseSent) {
+                    res.status(500).send('Error during video processing');
+                    responseSent = true;
+                }
             })
             .pipe(res, { end: true });
+            
     } catch (error) {
         console.error('Error downloading video:', error);
-        res.status(500).json({ error: 'Failed to download video.' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to download video.' });
+        }
     }
 });
 
@@ -139,13 +169,22 @@ app.get('/api/audio', (req, res) => {
         }
 
         res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
-
-        // Pass the request options to ytdl
-        ytdl(videoUrl, {
+        
+        const audioStream = ytdl(videoUrl, {
             filter: 'audioonly',
             quality: 'highestaudio',
             ...requestOptions
-        }).pipe(res);
+        });
+        
+        // Add an error handler to the stream
+        audioStream.on('error', (err) => {
+            console.error('ytdl stream error:', err);
+            if (!res.headersSent) {
+                 return res.status(500).json({ error: err.message || 'Failed to download audio stream.' });
+            }
+        });
+
+        audioStream.pipe(res);
     } catch (error) {
         console.error('Error downloading audio:', error);
         res.status(500).json({ error: 'Failed to download audio.' });
