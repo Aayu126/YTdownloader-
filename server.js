@@ -135,16 +135,26 @@ app.get('/api/hq-download', (req, res) => {
 
         res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
 
-        ffmpeg()
+        // Use a variable to track if the FFmpeg command has started.
+        let ffmpegStarted = false;
+
+        const ffmpegCommand = ffmpeg()
             .input(videoStream)
             .videoCodec('copy')
             .input(audioStream)
             .audioCodec('copy')
             .format('mp4')
-            .on('error', (err) => {
-                console.error('ffmpeg error:', err);
-                if (!responseSent) {
-                    res.status(500).send('Error during video processing');
+            .on('start', () => {
+                ffmpegStarted = true;
+            })
+            .on('error', (err, stdout, stderr) => {
+                console.error('ffmpeg error:', err.message, stdout, stderr);
+                // The headers have already been sent, so we just end the response.
+                if (ffmpegStarted) {
+                    res.end();
+                } else if (!responseSent) {
+                    // If FFmpeg hasn't started yet, we send an error message
+                    res.status(500).json({ error: err.message || 'Error during video processing before it could start.' });
                     responseSent = true;
                 }
             })
