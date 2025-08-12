@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoDownloadOptionBtn = document.getElementById('video-download-option');
     const audioDownloadOptionBtn = document.getElementById('audio-download-option');
 
+    // NEW: API Base URL from the user's provided snippet
+    const API_BASE = "https://ytdownloader-production-cb83.up.railway.app";
     let currentVideoDetails = null;
 
     // Helper function to show toast notifications
@@ -39,16 +41,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
 
-    // Function to initiate video download
-    function initiateDownload(videoId, itag, quality) {
-        const downloadUrl = `http://localhost:4000/api/download?videoId=${videoId}&itag=${itag}`;
+    // Function to initiate video download for combined streams
+    function initiateStandardDownload(videoId, itag, quality) {
+        const downloadUrl = `${API_BASE}/api/download?videoId=${videoId}&itag=${itag}`;
         window.location.href = downloadUrl;
         createNotification('Download Started!', `Your video (${quality}) is now downloading.`, 'success');
+    }
+    
+    // NEW: Function to initiate high-quality video download by combining streams
+    function initiateHqDownload(videoId, itag, quality) {
+        const downloadUrl = `${API_BASE}/api/hq-download?videoId=${videoId}&itag=${itag}`;
+        window.location.href = downloadUrl;
+        createNotification('Download Started!', `Your high-quality video (${quality}) is now downloading. This may take a moment.`, 'success');
     }
 
     // Function to initiate audio download
     function initiateAudioDownload(videoId) {
-        const downloadUrl = `http://localhost:4000/api/audio?videoId=${videoId}`;
+        const downloadUrl = `${API_BASE}/api/audio?videoId=${videoId}`;
         window.location.href = downloadUrl;
         createNotification('Audio Download Started!', `Your audio file is now downloading.`, 'success');
     }
@@ -60,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
         videoDetailsSection.style.display = 'none';
         
         try {
-            const response = await fetch(`http://localhost:4000/api/videoInfo?url=${encodeURIComponent(url)}`);
+            const response = await fetch(`${API_BASE}/api/videoInfo?url=${encodeURIComponent(url)}`);
             
             // Check for network errors (server not running)
             if (!response.ok) {
@@ -101,11 +110,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isVideoActive) {
             // Create download buttons for video
-            currentVideoDetails.formats.filter(f => f.qualityLabel).sort((a,b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel)).forEach(format => {
+            currentVideoDetails.formats.filter(f => f.qualityLabel).sort((a,b) => {
+                const aRes = parseInt(a.qualityLabel);
+                const bRes = parseInt(b.qualityLabel);
+                // Sort by resolution, highest first
+                return bRes - aRes;
+            }).forEach(format => {
                 const button = document.createElement('button');
                 button.className = 'download-btn';
                 button.innerHTML = `Download ${format.qualityLabel}`;
-                button.onclick = () => initiateDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
+                // Determine which download function to use based on the format type
+                if (format.hasAudio && format.hasVideo) {
+                    // This is a combined video/audio stream (standard download)
+                    button.onclick = () => initiateStandardDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
+                } else if (format.hasVideo && !format.hasAudio) {
+                    // This is a video-only stream, so we use the HQ download endpoint
+                    button.onclick = () => initiateHqDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
+                }
                 downloadOptionsDiv.appendChild(button);
             });
         } else {

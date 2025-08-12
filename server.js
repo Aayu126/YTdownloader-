@@ -1,16 +1,8 @@
-// polyfill - MUST be first
-import { Blob, File } from 'buffer';
-if (typeof globalThis.Blob === 'undefined') globalThis.Blob = Blob;
-if (typeof globalThis.File === 'undefined') globalThis.File = File;
 import express from 'express';
 import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-
-ffmpeg.setFfmpegPath(ffmpegPath.path);
-
 
 // Load environment variables from a .env file
 dotenv.config();
@@ -38,6 +30,8 @@ app.get('/api/videoInfo', async (req, res) => {
         }
 
         const info = await ytdl.getInfo(cleanUrl);
+        // UPDATED: No longer filtering for combined video/audio formats. 
+        // This will expose all available formats, including high-quality video-only streams.
         const formats = info.formats;
 
         res.status(200).json({
@@ -51,6 +45,7 @@ app.get('/api/videoInfo', async (req, res) => {
 });
 
 // Endpoint to download a standard video (combined audio/video stream)
+// This endpoint is for backwards compatibility.
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
@@ -71,7 +66,7 @@ app.get('/api/download', (req, res) => {
     }
 });
 
-// Endpoint to download a high-quality video by combining video and audio streams
+// NEW: Endpoint to download a high-quality video by combining video and audio streams
 app.get('/api/hq-download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
@@ -81,10 +76,12 @@ app.get('/api/hq-download', (req, res) => {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
 
+        // Get the video stream (video only, based on the provided itag)
         const videoStream = ytdl(videoUrl, {
             filter: format => format.itag == itag
         });
 
+        // Get the audio stream (highest quality audio)
         const audioStream = ytdl(videoUrl, {
             filter: 'audioonly',
             quality: 'highestaudio'
@@ -92,11 +89,12 @@ app.get('/api/hq-download', (req, res) => {
 
         res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
 
+        // Use ffmpeg to combine the video and audio streams and pipe them to the response
         ffmpeg()
             .input(videoStream)
-            .videoCodec('copy')
+            .videoCodec('copy') // Copy the video codec to avoid re-encoding
             .input(audioStream)
-            .audioCodec('copy')
+            .audioCodec('copy') // Copy the audio codec to avoid re-encoding
             .format('mp4')
             .on('error', (err) => {
                 console.error('ffmpeg error:', err);
