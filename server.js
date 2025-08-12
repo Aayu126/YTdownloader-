@@ -1,9 +1,7 @@
-// ------- polyfill: ensure global File/Blob for undici in some Node environments -------
+// polyfill - MUST be first
 import { Blob, File } from 'buffer';
 if (typeof globalThis.Blob === 'undefined') globalThis.Blob = Blob;
 if (typeof globalThis.File === 'undefined') globalThis.File = File;
-// -------------------------------------------------------------------------------
-
 import express from 'express';
 import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
