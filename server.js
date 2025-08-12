@@ -108,7 +108,7 @@ app.get('/api/hq-download', (req, res) => {
         
         let responseSent = false;
         let ffmpegProcess;
-        
+
         const sendErrorResponse = (err) => {
             console.error('Download error:', err.message);
             if (!responseSent) {
@@ -130,16 +130,13 @@ app.get('/api/hq-download', (req, res) => {
             quality: 'highestaudio',
             ...requestOptions
         });
-        
-        // Use a Promise to wait for both streams to become readable
-        Promise.all([
-            new Promise((resolve, reject) => {
-                videoStream.on('readable', resolve).on('error', reject);
-            }),
-            new Promise((resolve, reject) => {
-                audioStream.on('readable', resolve).on('error', reject);
-            })
-        ]).then(() => {
+
+        // Set up error handlers to kill FFmpeg and send a response immediately if a stream fails
+        videoStream.on('error', sendErrorResponse);
+        audioStream.on('error', sendErrorResponse);
+
+        // Check for stream errors before starting FFmpeg to prevent the process from crashing
+        if (videoStream.readable && audioStream.readable) {
             res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
 
             ffmpegProcess = ffmpeg()
@@ -149,17 +146,24 @@ app.get('/api/hq-download', (req, res) => {
                 .audioCodec('copy')
                 .format('mp4')
                 .on('error', (err) => {
-                    sendErrorResponse(err);
+                    if (!responseSent) {
+                        res.status(500).json({ error: 'FFmpeg processing failed: ' + err.message });
+                        responseSent = true;
+                    }
                 })
                 .pipe(res, { end: true });
-                
-            res.once('close', () => {
-                if (ffmpegProcess && !ffmpegProcess.killed) {
-                    ffmpegProcess.kill('SIGKILL');
-                }
-            });
-        }).catch(sendErrorResponse);
+        } else {
+            // One of the streams is not ready, trigger the error handler
+            sendErrorResponse(new Error('One or more video/audio streams failed to start.'));
+        }
 
+        // Clean up resources if the client disconnects prematurely
+        res.once('close', () => {
+            if (ffmpegProcess && !ffmpegProcess.killed) {
+                ffmpegProcess.kill('SIGKILL');
+            }
+        });
+        
     } catch (error) {
         console.error('Error in hq-download route:', error);
         if (!res.headersSent) {
