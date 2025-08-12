@@ -106,15 +106,18 @@ app.get('/api/hq-download', (req, res) => {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
         
-        // Flag to prevent sending multiple responses
+        // This flag helps prevent sending multiple responses if multiple errors occur
         let responseSent = false;
         
-        // Error handler function for streams
-        const streamErrorHandler = (err) => {
-            console.error('ytdl stream error:', err);
+        // Helper function to handle and send errors cleanly
+        const sendErrorResponse = (err) => {
+            console.error('Download error:', err.message);
             if (!responseSent) {
-                res.status(500).json({ error: err.message || 'Failed to download stream for processing.' });
+                res.status(500).json({ error: err.message || 'Failed to download the video.' });
                 responseSent = true;
+            }
+            if (ffmpegProcess) {
+                ffmpegProcess.kill('SIGKILL');
             }
         };
 
@@ -128,40 +131,35 @@ app.get('/api/hq-download', (req, res) => {
             quality: 'highestaudio',
             ...requestOptions
         });
-
-        // Attach error handlers to both streams
-        videoStream.on('error', streamErrorHandler);
-        audioStream.on('error', streamErrorHandler);
+        
+        // Handle stream errors
+        videoStream.on('error', sendErrorResponse);
+        audioStream.on('error', sendErrorResponse);
 
         res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
 
-        // Use a variable to track if the FFmpeg command has started.
-        let ffmpegStarted = false;
-
-        const ffmpegCommand = ffmpeg()
+        let ffmpegProcess;
+        ffmpegProcess = ffmpeg()
             .input(videoStream)
             .videoCodec('copy')
             .input(audioStream)
             .audioCodec('copy')
             .format('mp4')
-            .on('start', () => {
-                ffmpegStarted = true;
-            })
-            .on('error', (err, stdout, stderr) => {
-                console.error('ffmpeg error:', err.message, stdout, stderr);
-                // The headers have already been sent, so we just end the response.
-                if (ffmpegStarted) {
-                    res.end();
-                } else if (!responseSent) {
-                    // If FFmpeg hasn't started yet, we send an error message
-                    res.status(500).json({ error: err.message || 'Error during video processing before it could start.' });
-                    responseSent = true;
-                }
+            .on('error', (err) => {
+                // If FFmpeg itself crashes, we handle it here
+                sendErrorResponse(err);
             })
             .pipe(res, { end: true });
             
+        // Clean up resources if the client disconnects prematurely
+        res.once('close', () => {
+            if (ffmpegProcess && !ffmpegProcess.killed) {
+                ffmpegProcess.kill('SIGKILL');
+            }
+        });
+
     } catch (error) {
-        console.error('Error downloading video:', error);
+        console.error('Error in hq-download route:', error);
         if (!res.headersSent) {
             res.status(500).json({ error: 'Failed to download video.' });
         }
@@ -177,6 +175,8 @@ app.get('/api/audio', (req, res) => {
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
+        
+        let responseSent = false;
 
         res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
         
@@ -189,15 +189,24 @@ app.get('/api/audio', (req, res) => {
         // Add an error handler to the stream
         audioStream.on('error', (err) => {
             console.error('ytdl stream error:', err);
-            if (!res.headersSent) {
-                 return res.status(500).json({ error: err.message || 'Failed to download audio stream.' });
+            if (!responseSent) {
+                return res.status(500).json({ error: err.message || 'Failed to download audio stream.' });
+                responseSent = true;
             }
         });
 
         audioStream.pipe(res);
+        
+        // Clean up if client disconnects
+        res.once('close', () => {
+            audioStream.destroy();
+        });
+
     } catch (error) {
         console.error('Error downloading audio:', error);
-        res.status(500).json({ error: 'Failed to download audio.' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to download audio.' });
+        }
     }
 });
 
