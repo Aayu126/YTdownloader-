@@ -6,7 +6,11 @@ import express from 'express';
 import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
-import ffmpeg from 'fluent-ffmpeg'; // NEW: Import the ffmpeg library
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+
+ffmpeg.setFfmpegPath(ffmpegPath.path);
+
 
 // Load environment variables from a .env file
 dotenv.config();
