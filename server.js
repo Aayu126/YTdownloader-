@@ -13,7 +13,6 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 // Load environment variables
 dotenv.config();
 
-// Create app
 const app = express();
 app.use(cors());
 
@@ -23,10 +22,15 @@ const PORT = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve your HTML page
+// Serve static files (HTML, CSS, JS)
 app.use(express.static(__dirname));
 
-// Video info endpoint
+// Serve main page
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'YT.html'));
+});
+
+// Get video info
 app.get('/api/videoInfo', async (req, res) => {
     try {
         const { url } = req.query;
@@ -38,11 +42,17 @@ app.get('/api/videoInfo', async (req, res) => {
         }
 
         const info = await ytdl.getInfo(cleanUrl);
+        const seen = new Set();
+        const uniqueFormats = info.formats.filter(f => {
+            if (!f.qualityLabel) return false;
+            if (seen.has(f.qualityLabel)) return false;
+            seen.add(f.qualityLabel);
+            return true;
+        });
 
-        // Keep all formats (frontend handles video/audio selection)
         res.json({
             videoDetails: info.videoDetails,
-            formats: info.formats
+            formats: uniqueFormats
         });
     } catch (error) {
         console.error('Error fetching video info:', error);
@@ -50,7 +60,7 @@ app.get('/api/videoInfo', async (req, res) => {
     }
 });
 
-// Normal download (progressive streams with audio)
+// Download combined streams
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
@@ -62,22 +72,18 @@ app.get('/api/download', (req, res) => {
         ytdl(`https://www.youtube.com/watch?v=${videoId}`, {
             filter: format => format.itag == itag
         }).pipe(res);
-
     } catch (error) {
         console.error('Error downloading video:', error);
         res.status(500).json({ error: 'Failed to download video' });
     }
 });
 
-// HQ download (merge video-only + chosen audio)
+// High quality video + audio merge
 app.get('/api/hq-download', async (req, res) => {
     try {
-        const { videoId, itag, audioItag } = req.query;
+        const { videoId, itag } = req.query;
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
-        }
-        if (!itag || !audioItag) {
-            return res.status(400).json({ error: 'Both video itag and audio itag are required' });
         }
 
         const videoStream = ytdl(`https://www.youtube.com/watch?v=${videoId}`, {
@@ -85,7 +91,8 @@ app.get('/api/hq-download', async (req, res) => {
         });
 
         const audioStream = ytdl(`https://www.youtube.com/watch?v=${videoId}`, {
-            filter: format => format.itag == audioItag
+            filter: 'audioonly',
+            quality: 'highestaudio'
         });
 
         res.header('Content-Disposition', `attachment; filename="video_with_audio.mp4"`);
@@ -94,8 +101,8 @@ app.get('/api/hq-download', async (req, res) => {
         ffmpeg()
             .input(videoStream)
             .input(audioStream)
-            .videoCodec('copy') // keep original video codec
-            .audioCodec('aac') // re-encode audio for compatibility
+            .videoCodec('copy')
+            .audioCodec('aac')
             .audioBitrate(128)
             .format('mp4')
             .on('error', err => {
@@ -127,7 +134,6 @@ app.get('/api/audio', (req, res) => {
             filter: 'audioonly',
             quality: 'highestaudio'
         }).pipe(res);
-
     } catch (error) {
         console.error('Error downloading audio:', error);
         res.status(500).json({ error: 'Failed to download audio' });
