@@ -18,19 +18,19 @@ app.use(cors());
 // Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
-// Resolve the directory name to be used for serving static files
+// Resolve the directory name
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static files from the current directory
+// Serve static files from the project's root directory
 app.use(express.static(__dirname));
 
-// Correctly serve your main HTML file for the root URL
+// Correctly serve the main HTML file for the root URL
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'YT.html'));
 });
 
-// Define a user agent to make requests appear like they're from a browser
+// Define a user agent for requests
 const requestOptions = {
     requestOptions: {
         headers: {
@@ -64,7 +64,7 @@ app.get('/api/videoInfo', async (req, res) => {
     }
 });
 
-// Endpoint to download a standard video (combined audio/video stream)
+// Endpoint to download a standard video
 app.get('/api/download', async (req, res) => {
     try {
         const { videoId, itag } = req.query;
