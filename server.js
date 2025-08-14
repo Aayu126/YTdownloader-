@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { HttpsProxyAgent } from 'https-proxy-agent'; // NEW: Import the proxy agent
 
 // Load environment variables from a .env file
 dotenv.config();
@@ -30,9 +31,15 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'YT.html'));
 });
 
-// Define a user agent for requests
+// IMPORTANT: Define your proxy URL here using an environment variable
+// You must set this variable in your Railway dashboard.
+const proxyUrl = process.env.HTTP_PROXY || 'http://YOUR_PROXY_USERNAME:YOUR_PROXY_PASSWORD@YOUR_PROXY_SERVER:YOUR_PROXY_PORT';
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
+
+// Define request options to use the proxy agent and a user agent
 const requestOptions = {
     requestOptions: {
+        agent: proxyAgent, // ADDED: Use the proxy agent
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
         }
@@ -46,7 +53,7 @@ app.get('/api/videoInfo', async (req, res) => {
         if (!url) {
             return res.status(400).json({ error: 'Please provide a YouTube URL' });
         }
-        
+
         const cleanUrl = url.split('&')[0];
 
         if (!ytdl.validateURL(cleanUrl)) {
@@ -69,14 +76,14 @@ app.get('/api/download', async (req, res) => {
     try {
         const { videoId, itag } = req.query;
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        
+
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-        
+
         const info = await ytdl.getInfo(videoId, requestOptions);
         const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
-        
+
         res.header('Content-Disposition', `attachment; filename="${title}.mp4"`);
 
         const videoStream = ytdl(videoUrl, {
@@ -109,10 +116,10 @@ app.get('/api/hq-download', async (req, res) => {
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-        
+
         const info = await ytdl.getInfo(videoId, requestOptions);
         const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
-        
+
         const videoFormat = ytdl.chooseFormat(info.formats, { filter: 'videoonly', quality: 'highestvideo' });
         const audioFormat = ytdl.chooseFormat(info.formats, { filter: 'audioonly', quality: 'highestaudio' });
 
@@ -136,7 +143,7 @@ app.get('/api/hq-download', async (req, res) => {
                 }
             })
             .pipe(res, { end: true });
-        
+
         res.once('close', () => {
             if (ffmpegProcess && !ffmpegProcess.killed) {
                 ffmpegProcess.kill('SIGKILL');
@@ -159,18 +166,18 @@ app.get('/api/audio', async (req, res) => {
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-        
+
         const info = await ytdl.getInfo(videoId, requestOptions);
         const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
-        
+
         res.header('Content-Disposition', `attachment; filename="${title}.mp3"`);
-        
+
         const audioStream = ytdl(videoUrl, {
             filter: 'audioonly',
             quality: 'highestaudio',
             ...requestOptions
         });
-        
+
         audioStream.on('error', (err) => {
             console.error('ytdl stream error:', err);
             if (!res.headersSent) {
@@ -179,7 +186,7 @@ app.get('/api/audio', async (req, res) => {
         });
 
         audioStream.pipe(res);
-        
+
         res.once('close', () => {
             audioStream.destroy();
         });
