@@ -60,13 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Function to fetch video info from the backend
     async function fetchVideoInfo(url) {
-        loader.classList.remove('hidden');
-        errorMessage.classList.add('hidden');
-        videoDetailsSection.classList.add('hidden');
-        downloadProgressContainer.classList.add('hidden');
+        loader.style.display = 'block';
+        errorMessage.style.display = 'none';
+        videoDetailsSection.style.display = 'none';
+        downloadProgressContainer.style.display = 'none';
 
         try {
-            // Use relative path for deployment
             const response = await fetch(`/api/videoInfo?url=${encodeURIComponent(url)}`);
             
             if (!response.ok) {
@@ -82,16 +81,16 @@ document.addEventListener('DOMContentLoaded', () => {
             videoTitle.textContent = data.videoDetails.title;
             channelName.textContent = data.videoDetails.author.name;
             videoDuration.textContent = `Duration: ${formatDuration(data.videoDetails.lengthSeconds)}`;
-            videoDetailsSection.classList.remove('hidden');
+            videoDetailsSection.style.display = 'block';
 
             updateDownloadOptions();
             
         } catch (error) {
             errorMessage.textContent = error.message;
-            errorMessage.classList.remove('hidden');
+            errorMessage.style.display = 'block';
             createNotification('Error', error.message, 'error');
         } finally {
-            loader.classList.add('hidden');
+            loader.style.display = 'none';
         }
     }
 
@@ -103,8 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isVideoActive = videoDownloadOptionBtn.classList.contains('active');
 
         if (isVideoActive) {
-            // Create download buttons for video
-            // Filter for formats that have both video and audio
             currentVideoDetails.formats
                 .filter(f => f.qualityLabel)
                 .sort((a,b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel))
@@ -116,9 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 downloadOptionsDiv.appendChild(button);
             });
         } else {
-            // Create audio download button
             const audioButton = document.createElement('button');
-            audioButton.className = 'download-btn bg-green-500 hover:bg-green-600 focus:ring-green-500';
+            audioButton.className = 'download-btn audio';
             audioButton.textContent = 'Download as MP3';
             audioButton.onclick = () => initiateAudioDownload(currentVideoDetails.videoDetails.videoId);
             downloadOptionsDiv.appendChild(audioButton);
@@ -126,14 +122,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showProgressBar() {
-        downloadProgressContainer.classList.remove('hidden');
+        downloadProgressContainer.style.display = 'block';
         progressBar.style.width = '0%';
         let progress = 0;
         const interval = setInterval(() => {
             if (progress >= 99) {
                 clearInterval(interval);
             } else {
-                progress += Math.random() * 5; // Simulates download progress
+                progress += Math.random() * 5; 
                 progressBar.style.width = `${progress}%`;
             }
         }, 1000);
@@ -175,4 +171,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const remainingSeconds = seconds % 60;
         return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
     }
+
+    document.querySelectorAll('.faq-item').forEach(item => {
+        item.querySelector('.faq-question').addEventListener('click', () => {
+            const answer = item.querySelector('.faq-answer');
+            answer.style.maxHeight = answer.style.maxHeight ? null : answer.scrollHeight + "px";
+            item.classList.toggle('active');
+        });
+    });
 });

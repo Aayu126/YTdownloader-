@@ -410,7 +410,6 @@ nav a:hover {
     transform: rotate(180deg);
 }
 
-
 footer {
     background-color: var(--dark);
     color: white;
@@ -624,19 +623,16 @@ footer {
 /* Progress bar styles */
 .download-progress-container {
     width: 100%;
-    background-color: #e5e7eb;
-    border-radius: 9999px; /* This is the class for rounded-full in Tailwind */
-    margin-top: 1rem;
+    background-color: #f0f0f0;
+    border-radius: 5px;
+    margin-top: 15px;
     overflow: hidden;
     display: none;
 }
-.download-progress-container.show {
-    display: block;
-}
 .progress-bar {
-    height: 0.5rem;
+    height: 10px;
     background-color: var(--primary);
     width: 0%;
-    transition: width 0.5s ease-in-out;
+    transition: width 0.3s;
 }
 
