@@ -1,8 +1,3 @@
-// Polyfill for File and Blob in Node.js (needed for undici in Node 18)
-import { Blob, File } from 'buffer';
-if (typeof globalThis.Blob === 'undefined') globalThis.Blob = Blob;
-if (typeof globalThis.File === 'undefined') globalThis.File = File;
-
 import express from 'express';
 import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
