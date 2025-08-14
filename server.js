@@ -38,19 +38,11 @@ app.get('/api/videoInfo', async (req, res) => {
         }
 
         const info = await ytdl.getInfo(cleanUrl);
-        
-        // Remove duplicate quality labels
-        const seen = new Set();
-        const uniqueFormats = info.formats.filter(f => {
-            if (!f.qualityLabel) return false;
-            if (seen.has(f.qualityLabel)) return false;
-            seen.add(f.qualityLabel);
-            return true;
-        });
 
+        // Keep all formats (frontend handles video/audio selection)
         res.json({
             videoDetails: info.videoDetails,
-            formats: uniqueFormats
+            formats: info.formats
         });
     } catch (error) {
         console.error('Error fetching video info:', error);
@@ -58,7 +50,7 @@ app.get('/api/videoInfo', async (req, res) => {
     }
 });
 
-// Normal download (combined streams)
+// Normal download (progressive streams with audio)
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
@@ -77,12 +69,15 @@ app.get('/api/download', (req, res) => {
     }
 });
 
-// High quality video + audio merge
+// HQ download (merge video-only + chosen audio)
 app.get('/api/hq-download', async (req, res) => {
     try {
-        const { videoId, itag } = req.query;
+        const { videoId, itag, audioItag } = req.query;
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
+        }
+        if (!itag || !audioItag) {
+            return res.status(400).json({ error: 'Both video itag and audio itag are required' });
         }
 
         const videoStream = ytdl(`https://www.youtube.com/watch?v=${videoId}`, {
@@ -90,8 +85,7 @@ app.get('/api/hq-download', async (req, res) => {
         });
 
         const audioStream = ytdl(`https://www.youtube.com/watch?v=${videoId}`, {
-            filter: 'audioonly',
-            quality: 'highestaudio'
+            filter: format => format.itag == audioItag
         });
 
         res.header('Content-Disposition', `attachment; filename="video_with_audio.mp4"`);
@@ -100,8 +94,8 @@ app.get('/api/hq-download', async (req, res) => {
         ffmpeg()
             .input(videoStream)
             .input(audioStream)
-            .videoCodec('copy')
-            .audioCodec('aac') // Re-encode audio to AAC
+            .videoCodec('copy') // keep original video codec
+            .audioCodec('aac') // re-encode audio for compatibility
             .audioBitrate(128)
             .format('mp4')
             .on('error', err => {

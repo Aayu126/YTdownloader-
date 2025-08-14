@@ -1,6 +1,5 @@
-// Script.js
 document.addEventListener('DOMContentLoaded', () => {
-  const apiBase = `${window.location.origin}`; // works on Railway and locally
+  const apiBase = `${window.location.origin}`;
 
   const videoUrlInput = document.getElementById('videoUrl');
   const searchBtn = document.getElementById('searchBtn');
@@ -12,8 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const downloadOptionsDiv = document.getElementById('downloadOptions');
   const loader = document.getElementById('loader');
   const errorMessage = document.getElementById('errorMessage');
-  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-  const mainNav = document.getElementById('mainNav');
 
   const videoDownloadOptionBtn = document.getElementById('video-download-option');
   const audioDownloadOptionBtn = document.getElementById('audio-download-option');
@@ -37,27 +34,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function initiateVideoDownload(videoId, opt, audioItag) {
-    if (opt.isVideoOnly) {
-      // merge MP4 video-only + AAC
-      const u = `${apiBase}/api/hq-download?videoId=${encodeURIComponent(
-        videoId
-      )}&itag=${encodeURIComponent(opt.itag)}&audioItag=${encodeURIComponent(audioItag || 140)}`;
-      dl(u);
-      createNotification('Download started', `Merging ${opt.qualityLabel} (MP4)`, 'success');
-    } else {
-      // progressive MP4
-      const u = `${apiBase}/api/download?videoId=${encodeURIComponent(
-        videoId
-      )}&itag=${encodeURIComponent(opt.itag)}`;
+    if (opt.hasAudio) {
+      const u = `${apiBase}/api/download?videoId=${encodeURIComponent(videoId)}&itag=${encodeURIComponent(opt.itag)}`;
       dl(u);
       createNotification('Download started', `${opt.qualityLabel} (MP4)`, 'success');
+    } else {
+      const u = `${apiBase}/api/hq-download?videoId=${encodeURIComponent(videoId)}&itag=${encodeURIComponent(opt.itag)}&audioItag=${encodeURIComponent(audioItag || 140)}`;
+      dl(u);
+      createNotification('Download started', `Merging ${opt.qualityLabel} video + audio`, 'success');
     }
   }
 
   function initiateAudioDownload(videoId) {
     const u = `${apiBase}/api/audio?videoId=${encodeURIComponent(videoId)}`;
     dl(u);
-    createNotification('Audio download started', 'Fetching best available AAC audio', 'success');
+    createNotification('Audio download started', 'Fetching best quality audio', 'success');
   }
 
   async function fetchVideoInfo(url) {
@@ -68,12 +59,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const resp = await fetch(`${apiBase}/api/videoInfo?url=${encodeURIComponent(url)}`);
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.error || resp.statusText);
-      }
+      if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
+
       const data = await resp.json();
       current = data;
+
+      // Find best audio itag
+      const audioOnly = data.formats.filter(f => f.mimeType.includes('audio'));
+      const bestAudio = audioOnly.sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0))[0];
+      current.audioItag = bestAudio ? bestAudio.itag : 140;
 
       const thumbs = data.videoDetails.thumbnails || [];
       videoThumbnail.src = thumbs[thumbs.length - 1]?.url || thumbs[0]?.url || '';
@@ -98,17 +92,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const isVideo = videoDownloadOptionBtn.classList.contains('active');
 
     if (isVideo) {
-      // Many options, unique by quality, already filtered server-side to MP4-compatible
+      const seen = new Set();
       const list = current.formats
-        .filter((f) => f.qualityLabel)
-        .sort((a, b) => (parseInt(b.qualityLabel) || 0) - (parseInt(a.qualityLabel) || 0));
+        .filter(f => f.qualityLabel && f.mimeType.includes('video'))
+        .sort((a, b) => (parseInt(b.qualityLabel) || 0) - (parseInt(a.qualityLabel) || 0))
+        .filter(f => {
+          if (seen.has(f.qualityLabel)) return false;
+          seen.add(f.qualityLabel);
+          return true;
+        })
+        .map(f => ({
+          ...f,
+          hasAudio: f.hasAudio || f.mimeType.includes('audio'),
+          isVideoOnly: !f.mimeType.includes('audio')
+        }));
 
-      list.forEach((opt) => {
+      list.forEach(opt => {
         const btn = document.createElement('button');
         btn.className = 'download-btn';
         btn.textContent = `${opt.qualityLabel}${opt.isVideoOnly ? ' (HQ merge)' : ''}`;
-        btn.onclick = () =>
-          initiateVideoDownload(current.videoDetails.videoId, opt, current.audioItag);
+        btn.onclick = () => initiateVideoDownload(current.videoDetails.videoId, opt, current.audioItag);
         downloadOptionsDiv.appendChild(btn);
       });
     } else {
