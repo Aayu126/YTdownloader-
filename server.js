@@ -1,4 +1,13 @@
-import './polyfill.js';
+// Polyfill for File in Node.js
+import { Blob } from 'buffer';
+global.File = class File extends Blob {
+    constructor(chunks, filename, options = {}) {
+        super(chunks, options);
+        this.name = filename;
+        this.lastModified = options.lastModified || Date.now();
+    }
+};
+
 import express from 'express';
 import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
