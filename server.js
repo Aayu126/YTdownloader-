@@ -1,26 +1,26 @@
 // server.js
 import express from 'express';
 import cors from 'cors';
-import ytdl from '@distube/ytdl-core'; // Reverted back to a more stable version that supports user-agent
+import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import { PassThrough } from 'stream';
-import path from 'path'; // NEW: Import the path module
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Load environment variables from a .env file
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
-// Create an Express application
 const app = express();
-// Enable CORS to allow requests from your frontend
 app.use(cors());
 
-// Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
-// NEW: Serve static files from the current directory
-// This tells Express to look for files like YT.html, Script.js, etc.
-app.use(express.static('.'));
+// Serve static files from the current directory
+app.use(express.static(__dirname));
 
 // Endpoint to get video information
 app.get('/api/videoInfo', async (req, res) => {
@@ -29,22 +29,31 @@ app.get('/api/videoInfo', async (req, res) => {
         if (!url) {
             return res.status(400).json({ error: 'Please provide a YouTube URL' });
         }
-
+        
         const cleanUrl = url.split('&')[0];
 
         if (!ytdl.validateURL(cleanUrl)) {
             return res.status(400).json({ error: 'Invalid YouTube URL' });
         }
 
-        // Add a user-agent header to the request to mimic a browser, helping to bypass bot detection.
-        const info = await ytdl.getInfo(cleanUrl, {
+        // Use more comprehensive request options to mimic a modern browser.
+        const options = {
             requestOptions: {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'sec-ch-ua': '"Google Chrome";v="91", "Chromium";v="91", ";Not A Brand";v="99"',
+                    'sec-ch-ua-mobile': '?0',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1',
                 },
             },
-        });
+        };
 
+        const info = await ytdl.getInfo(cleanUrl, options);
         const formats = info.formats;
 
         res.status(200).json({
@@ -78,8 +87,6 @@ app.get('/api/hq-download', (req, res) => {
             quality: 'highestaudio',
         });
 
-        const passThrough = new PassThrough();
-
         ffmpeg()
             .input(videoStream)
             .videoCodec('copy')
@@ -89,9 +96,6 @@ app.get('/api/hq-download', (req, res) => {
             .on('error', (err) => {
                 console.error('ffmpeg error:', err);
                 res.status(500).send('Error during video processing');
-            })
-            .on('progress', (progress) => {
-                console.log('Processing: ' + progress.percent + '% done');
             })
             .pipe(res, { end: true });
     } catch (error) {
@@ -122,7 +126,7 @@ app.get('/api/audio', (req, res) => {
     }
 });
 
-// NEW: Serve the main HTML file for the root route
+// Serve the main HTML file for the root route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'YT.html'));
 });

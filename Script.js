@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to initiate video download
     function initiateDownload(videoId, itag, quality) {
-        // Use the new hq-download endpoint
         const downloadUrl = `/api/hq-download?videoId=${videoId}&itag=${itag}`;
         window.location.href = downloadUrl;
         createNotification('Download Started!', `Your video (${quality}) is now downloading.`, 'success');
