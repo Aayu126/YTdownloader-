@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { HttpsProxyAgent } from 'https-proxy-agent'; // NEW: Import the proxy agent
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 // Load environment variables from a .env file
 dotenv.config();
@@ -32,14 +32,19 @@ app.get('/', (req, res) => {
 });
 
 // IMPORTANT: Define your proxy URL here using an environment variable
-// You must set this variable in your Railway dashboard.
-const proxyUrl = process.env.HTTP_PROXY || 'http://YOUR_PROXY_USERNAME:YOUR_PROXY_PASSWORD@YOUR_PROXY_SERVER:YOUR_PROXY_PORT';
-const proxyAgent = new HttpsProxyAgent(proxyUrl);
+const proxyUrl = process.env.HTTP_PROXY;
+
+// Check if a proxy URL is provided before creating the agent
+let proxyAgent = null;
+if (proxyUrl) {
+    proxyAgent = new HttpsProxyAgent(proxyUrl);
+}
 
 // Define request options to use the proxy agent and a user agent
+// FIX: Changed 'agent' to 'client' to fix the unsupported opts.agent error
 const requestOptions = {
     requestOptions: {
-        agent: proxyAgent, // ADDED: Use the proxy agent
+        client: proxyAgent,
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
         }
