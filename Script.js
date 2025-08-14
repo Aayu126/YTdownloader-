@@ -1,181 +1,139 @@
-// Script.js
-document.addEventListener('DOMContentLoaded', () => {
-    // UI elements
-    const videoUrlInput = document.getElementById('videoUrl');
-    const searchBtn = document.getElementById('searchBtn');
-    const videoDetailsSection = document.getElementById('videoDetails');
-    const videoThumbnail = document.getElementById('videoThumbnail');
-    const videoTitle = document.getElementById('videoTitle');
-    const channelName = document.getElementById('channelName');
-    const videoDuration = document.getElementById('videoDuration');
-    const downloadOptionsDiv = document.getElementById('downloadOptions');
-    const loader = document.getElementById('loader');
-    const errorMessage = document.getElementById('errorMessage');
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const mainNav = document.getElementById('mainNav');
-    const downloadProgressContainer = document.getElementById('downloadProgressContainer');
-    const progressBar = document.getElementById('progressBar');
-    
-    // New format option buttons
-    const videoDownloadOptionBtn = document.getElementById('video-download-option');
-    const audioDownloadOptionBtn = document.getElementById('audio-download-option');
+// server.js
+import express from 'express';
+import cors from 'cors';
+import ytdl from '@distube/ytdl-core';
+import dotenv from 'dotenv';
+import ffmpeg from 'fluent-ffmpeg';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-    let currentVideoDetails = null;
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-    // Helper function to show toast notifications
-    function createNotification(message, details, type) {
-        const notification = document.createElement('div');
-        notification.className = `toast-notification show ${type}`;
-        notification.innerHTML = `
-            <div>
-                <strong class="font-semibold">${message}</strong>
-                <p class="text-sm">${details}</p>
-            </div>
-        `;
-        document.body.appendChild(notification);
+// Load environment variables from a .env file
+dotenv.config();
+
+// Create an Express application
+const app = express();
+app.use(cors());
+
+const PORT = process.env.PORT || 4000;
+
+// Serve static files from the current directory
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
+
+// Endpoint to get video information
+app.get('/api/videoInfo', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) {
+            return res.status(400).json({ error: 'Please provide a YouTube URL' });
+        }
         
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, 5000);
-    }
+        const cleanUrl = url.split('&')[0];
 
-    // Function to initiate video download
-    function initiateDownload(videoId, itag, quality) {
-        const downloadUrl = `/api/hq-download?videoId=${videoId}&itag=${itag}`;
-        window.location.href = downloadUrl;
-        createNotification('Download Started!', `Your video (${quality}) is now downloading.`, 'success');
-        showProgressBar();
-    }
-
-    // Function to initiate audio download
-    function initiateAudioDownload(videoId) {
-        const downloadUrl = `/api/audio?videoId=${videoId}`;
-        window.location.href = downloadUrl;
-        createNotification('Audio Download Started!', `Your audio file is now downloading.`, 'success');
-        showProgressBar();
-    }
-    
-    // Function to fetch video info from the backend
-    async function fetchVideoInfo(url) {
-        loader.style.display = 'block';
-        errorMessage.style.display = 'none';
-        videoDetailsSection.style.display = 'none';
-        downloadProgressContainer.style.display = 'none';
-
-        try {
-            const response = await fetch(`/api/videoInfo?url=${encodeURIComponent(url)}`);
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Error: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            currentVideoDetails = data;
-            
-            // Populate video details
-            videoThumbnail.src = data.videoDetails.thumbnails[0].url;
-            videoTitle.textContent = data.videoDetails.title;
-            channelName.textContent = data.videoDetails.author.name;
-            videoDuration.textContent = `Duration: ${formatDuration(data.videoDetails.lengthSeconds)}`;
-            videoDetailsSection.style.display = 'block';
-
-            updateDownloadOptions();
-            
-        } catch (error) {
-            errorMessage.textContent = error.message;
-            errorMessage.style.display = 'block';
-            createNotification('Error', error.message, 'error');
-        } finally {
-            loader.style.display = 'none';
+        if (!ytdl.validateURL(cleanUrl)) {
+            return res.status(400).json({ error: 'Invalid YouTube URL' });
         }
-    }
 
-    // Function to update the download buttons based on the selected format
-    function updateDownloadOptions() {
-        if (!currentVideoDetails) return;
+        // Use more comprehensive request options to mimic a modern browser.
+        const options = {
+            requestOptions: {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'sec-ch-ua': '"Google Chrome";v="91", "Chromium";v="91", ";Not A Brand";v="99"',
+                    'sec-ch-ua-mobile': '?0',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1',
+                },
+            },
+        };
 
-        downloadOptionsDiv.innerHTML = '';
-        const isVideoActive = videoDownloadOptionBtn.classList.contains('active');
+        const info = await ytdl.getInfo(cleanUrl, options);
+        const formats = info.formats;
 
-        if (isVideoActive) {
-            currentVideoDetails.formats
-                .filter(f => f.qualityLabel)
-                .sort((a,b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel))
-                .forEach(format => {
-                const button = document.createElement('button');
-                button.className = 'download-btn';
-                button.textContent = `Download ${format.qualityLabel}`;
-                button.onclick = () => initiateDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
-                downloadOptionsDiv.appendChild(button);
-            });
-        } else {
-            const audioButton = document.createElement('button');
-            audioButton.className = 'download-btn audio';
-            audioButton.textContent = 'Download as MP3';
-            audioButton.onclick = () => initiateAudioDownload(currentVideoDetails.videoDetails.videoId);
-            downloadOptionsDiv.appendChild(audioButton);
-        }
-    }
-
-    function showProgressBar() {
-        downloadProgressContainer.style.display = 'block';
-        progressBar.style.width = '0%';
-        let progress = 0;
-        const interval = setInterval(() => {
-            if (progress >= 99) {
-                clearInterval(interval);
-            } else {
-                progress += Math.random() * 5; 
-                progressBar.style.width = `${progress}%`;
-            }
-        }, 1000);
-    }
-
-    // Event listeners
-    searchBtn.addEventListener('click', () => {
-        const url = videoUrlInput.value;
-        if (url) {
-            fetchVideoInfo(url);
-        } else {
-            createNotification('Invalid URL', 'Please enter a valid YouTube video URL.', 'error');
-        }
-    });
-
-    videoDownloadOptionBtn.addEventListener('click', () => {
-        videoDownloadOptionBtn.classList.add('active');
-        audioDownloadOptionBtn.classList.remove('active');
-        if (currentVideoDetails) {
-            updateDownloadOptions();
-        }
-    });
-
-    audioDownloadOptionBtn.addEventListener('click', () => {
-        audioDownloadOptionBtn.classList.add('active');
-        videoDownloadOptionBtn.classList.remove('active');
-        if (currentVideoDetails) {
-            updateDownloadOptions();
-        }
-    });
-
-    mobileMenuBtn.addEventListener('click', () => {
-        mainNav.querySelector('ul').classList.toggle('active');
-    });
-
-    // Simple duration formatter
-    function formatDuration(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
-    }
-
-    document.querySelectorAll('.faq-item').forEach(item => {
-        item.querySelector('.faq-question').addEventListener('click', () => {
-            const answer = item.querySelector('.faq-answer');
-            answer.style.maxHeight = answer.style.maxHeight ? null : answer.scrollHeight + "px";
-            item.classList.toggle('active');
+        res.status(200).json({
+            videoDetails: info.videoDetails,
+            formats: formats
         });
-    });
+    } catch (error) {
+        console.error('Error fetching video info:', error);
+        res.status(500).json({ error: `Failed to fetch video information. It might be private, restricted, or an invalid link. Details: ${error.message}` });
+    }
+});
+
+// Endpoint to download a high-quality video by combining video and audio streams
+app.get('/api/hq-download', (req, res) => {
+    try {
+        const { videoId, itag } = req.query;
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+        if (!ytdl.validateID(videoId)) {
+            return res.status(400).json({ error: 'Invalid video ID' });
+        }
+
+        res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
+
+        const videoStream = ytdl(videoUrl, {
+            filter: format => format.itag == itag,
+        });
+
+        const audioStream = ytdl(videoUrl, {
+            filter: 'audioonly',
+            quality: 'highestaudio',
+        });
+
+        ffmpeg()
+            .input(videoStream)
+            .videoCodec('copy')
+            .input(audioStream)
+            .audioCodec('copy')
+            .format('mp4')
+            .on('error', (err) => {
+                console.error('ffmpeg error:', err);
+                res.status(500).send('Error during video processing');
+            })
+            .pipe(res, { end: true });
+    } catch (error) {
+        console.error('Error downloading video:', error);
+        res.status(500).json({ error: 'Failed to download video.' });
+    }
+});
+
+// Endpoint to download audio
+app.get('/api/audio', (req, res) => {
+    try {
+        const { videoId } = req.query;
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+        if (!ytdl.validateID(videoId)) {
+            return res.status(400).json({ error: 'Invalid video ID' });
+        }
+
+        res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
+
+        ytdl(videoUrl, {
+            filter: 'audioonly',
+            quality: 'highestaudio'
+        }).pipe(res);
+    } catch (error) {
+        console.error('Error downloading audio:', error);
+        res.status(500).json({ error: 'Failed to download audio.' });
+    }
+});
+
+// Serve the main HTML file for the root route
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'YT.html'));
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });

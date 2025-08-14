@@ -4,7 +4,6 @@ import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
-import { PassThrough } from 'stream';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,14 +11,17 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables from a .env file
 dotenv.config();
 
+// Create an Express application
 const app = express();
 app.use(cors());
 
 const PORT = process.env.PORT || 4000;
 
 // Serve static files from the current directory
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
 // Endpoint to get video information
@@ -62,7 +64,7 @@ app.get('/api/videoInfo', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching video info:', error);
-        res.status(500).json({ error: 'Failed to fetch video information. It might be private, restricted, or an invalid link. ' + error.message });
+        res.status(500).json({ error: `Failed to fetch video information. It might be private, restricted, or an invalid link. Details: ${error.message}` });
     }
 });
 
