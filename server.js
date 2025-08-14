@@ -1,7 +1,12 @@
-// Polyfill for File and Blob in Node.js
-import { Blob, File } from 'buffer';
-if (typeof globalThis.Blob === 'undefined') globalThis.Blob = Blob;
-if (typeof globalThis.File === 'undefined') globalThis.File = File;
+// Polyfill for File in Node.js (needed for undici / fetch)
+import { Blob } from 'buffer';
+global.File = class File extends Blob {
+    constructor(chunks, filename, options = {}) {
+        super(chunks, options);
+        this.name = filename;
+        this.lastModified = options.lastModified || Date.now();
+    }
+};
 
 import express from 'express';
 import cors from 'cors';
@@ -53,9 +58,19 @@ app.get('/api/videoInfo', async (req, res) => {
         }
 
         const info = await ytdl.getInfo(cleanUrl, requestOptions);
+
+        // Filter unique formats by qualityLabel
+        const seenQualities = new Set();
+        const uniqueFormats = info.formats.filter(f => {
+            if (!f.qualityLabel) return false;
+            if (seenQualities.has(f.qualityLabel)) return false;
+            seenQualities.add(f.qualityLabel);
+            return true;
+        });
+
         res.status(200).json({
             videoDetails: info.videoDetails,
-            formats: info.formats
+            formats: uniqueFormats
         });
     } catch (error) {
         console.error('Error fetching video info:', error);
