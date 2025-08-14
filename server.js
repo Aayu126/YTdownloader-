@@ -1,135 +1,111 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
-import ffmpeg from 'fluent-ffmpeg'; // NEW: Import the ffmpeg library
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
-// Load environment variables from a .env file
 dotenv.config();
 
-// Create an Express application
 const app = express();
-// Enable CORS to allow requests from your frontend
 app.use(cors());
-
-// Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
-// Endpoint to get video information
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files from /public
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'YT.html'));
+});
+
+// Get video info (unique qualities)
 app.get('/api/videoInfo', async (req, res) => {
     try {
         const { url } = req.query;
-        if (!url) {
-            return res.status(400).json({ error: 'Please provide a YouTube URL' });
-        }
-        
-        const cleanUrl = url.split('&')[0];
+        if (!url) return res.status(400).json({ error: 'Please provide a YouTube URL' });
 
-        if (!ytdl.validateURL(cleanUrl)) {
-            return res.status(400).json({ error: 'Invalid YouTube URL' });
-        }
+        const cleanUrl = url.split('&')[0];
+        if (!ytdl.validateURL(cleanUrl)) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
         const info = await ytdl.getInfo(cleanUrl);
-        // UPDATED: No longer filtering for combined video/audio formats. 
-        // This will expose all available formats, including high-quality video-only streams.
-        const formats = info.formats;
+
+        const seenQualities = new Set();
+        const uniqueFormats = info.formats.filter(f => {
+            if (!f.qualityLabel) return false;
+            if (seenQualities.has(f.qualityLabel)) return false;
+            seenQualities.add(f.qualityLabel);
+            return true;
+        });
 
         res.status(200).json({
             videoDetails: info.videoDetails,
-            formats: formats
+            formats: uniqueFormats
         });
     } catch (error) {
         console.error('Error fetching video info:', error);
-        res.status(500).json({ error: 'Failed to fetch video information. It might be private, restricted, or an invalid link.' });
+        res.status(500).json({ error: 'Failed to fetch video information.' });
     }
 });
 
-// Endpoint to download a standard video (combined audio/video stream)
-// This endpoint is for backwards compatibility.
+// Standard download
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
+        if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video ID' });
 
         res.header('Content-Disposition', `attachment; filename="video.mp4"`);
-
-        ytdl(videoUrl, {
-            filter: format => format.itag == itag
-        }).pipe(res);
+        ytdl(`https://www.youtube.com/watch?v=${videoId}`, { filter: f => f.itag == itag }).pipe(res);
     } catch (error) {
         console.error('Error downloading video:', error);
         res.status(500).json({ error: 'Failed to download video.' });
     }
 });
 
-// NEW: Endpoint to download a high-quality video by combining video and audio streams
+// HQ download with merged audio
 app.get('/api/hq-download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video ID' });
 
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
-
-        // Get the video stream (video only, based on the provided itag)
-        const videoStream = ytdl(videoUrl, {
-            filter: format => format.itag == itag
-        });
-
-        // Get the audio stream (highest quality audio)
-        const audioStream = ytdl(videoUrl, {
-            filter: 'audioonly',
-            quality: 'highestaudio'
-        });
+        const videoStream = ytdl(`https://www.youtube.com/watch?v=${videoId}`, { filter: f => f.itag == itag });
+        const audioStream = ytdl(`https://www.youtube.com/watch?v=${videoId}`, { filter: 'audioonly', quality: 'highestaudio' });
 
         res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
-
-        // Use ffmpeg to combine the video and audio streams and pipe them to the response
         ffmpeg()
             .input(videoStream)
-            .videoCodec('copy') // Copy the video codec to avoid re-encoding
+            .videoCodec('copy')
             .input(audioStream)
-            .audioCodec('copy') // Copy the audio codec to avoid re-encoding
+            .audioCodec('copy')
             .format('mp4')
-            .on('error', (err) => {
+            .on('error', err => {
                 console.error('ffmpeg error:', err);
                 res.status(500).send('Error during video processing');
             })
             .pipe(res, { end: true });
     } catch (error) {
-        console.error('Error downloading video:', error);
-        res.status(500).json({ error: 'Failed to download video.' });
+        console.error('Error downloading HQ video:', error);
+        res.status(500).json({ error: 'Failed to download HQ video.' });
     }
 });
 
-// Endpoint to download audio
+// Audio only
 app.get('/api/audio', (req, res) => {
     try {
         const { videoId } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
+        if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video ID' });
 
         res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
-
-        ytdl(videoUrl, {
-            filter: 'audioonly',
-            quality: 'highestaudio'
-        }).pipe(res);
+        ytdl(`https://www.youtube.com/watch?v=${videoId}`, { filter: 'audioonly', quality: 'highestaudio' }).pipe(res);
     } catch (error) {
         console.error('Error downloading audio:', error);
         res.status(500).json({ error: 'Failed to download audio.' });
     }
 });
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-}); 
+});
