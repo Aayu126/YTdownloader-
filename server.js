@@ -5,6 +5,7 @@ import ytdl from '@distube/ytdl-core'; // Reverted back to a more stable version
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import { PassThrough } from 'stream';
+import path from 'path'; // NEW: Import the path module
 
 // Load environment variables from a .env file
 dotenv.config();
@@ -16,6 +17,10 @@ app.use(cors());
 
 // Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
+
+// NEW: Serve static files from the current directory
+// This tells Express to look for files like YT.html, Script.js, etc.
+app.use(express.static('.'));
 
 // Endpoint to get video information
 app.get('/api/videoInfo', async (req, res) => {
@@ -73,22 +78,19 @@ app.get('/api/hq-download', (req, res) => {
             quality: 'highestaudio',
         });
 
-        // Use a PassThrough stream to handle progress
         const passThrough = new PassThrough();
 
-        // Use ffmpeg to combine the video and audio streams and pipe them to the response
         ffmpeg()
             .input(videoStream)
-            .videoCodec('copy') // Copy the video codec to avoid re-encoding
+            .videoCodec('copy')
             .input(audioStream)
-            .audioCodec('copy') // Copy the audio codec to avoid re-encoding
+            .audioCodec('copy')
             .format('mp4')
             .on('error', (err) => {
                 console.error('ffmpeg error:', err);
                 res.status(500).send('Error during video processing');
             })
             .on('progress', (progress) => {
-                // You can log progress here for debugging on the server side
                 console.log('Processing: ' + progress.percent + '% done');
             })
             .pipe(res, { end: true });
@@ -118,6 +120,11 @@ app.get('/api/audio', (req, res) => {
         console.error('Error downloading audio:', error);
         res.status(500).json({ error: 'Failed to download audio.' });
     }
+});
+
+// NEW: Serve the main HTML file for the root route
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'YT.html'));
 });
 
 // Start the server

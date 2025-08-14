@@ -50,30 +50,32 @@
                         Audio (MP3)
                     </button>
                 </div>
-                </div>
-                
-                <div class="loader" id="loader">
-                    <div class="spinner"></div>
-                    <p>Fetching video information...</p>
-                </div>
-                
-                <div class="error-message" id="errorMessage"></div>
-                
-                <div class="video-details" id="videoDetails">
-                    <div class="video-info">
-                        <div class="thumbnail">
-                            <img id="videoThumbnail" src="" alt="Video Thumbnail">
-                        </div>
-                        <div class="info-text">
-                            <h2 id="videoTitle">Video Title</h2>
-                            <p id="channelName">Channel Name</p>
-                            <p id="videoDuration">Duration: 00:00</p>
-                            <p id="videoViews">Views: 0</p>
-                        </div>
+            </div>
+            
+            <div class="loader" id="loader">
+                <div class="spinner"></div>
+                <p>Fetching video information...</p>
+            </div>
+            
+            <div class="error-message" id="errorMessage"></div>
+            
+            <div class="video-details" id="videoDetails">
+                <div class="video-info">
+                    <div class="thumbnail">
+                        <img id="videoThumbnail" src="" alt="Video Thumbnail">
                     </div>
-                    <div class="download-options" id="downloadOptions">
-                        <!-- Download options will be added here dynamically -->
+                    <div class="info-text">
+                        <h2 id="videoTitle">Video Title</h2>
+                        <p id="channelName">Channel Name</p>
+                        <p id="videoDuration">Duration: 00:00</p>
+                        <p id="videoViews">Views: 0</p>
                     </div>
+                </div>
+                <div class="download-progress-container" id="downloadProgressContainer">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <div class="download-options" id="downloadOptions">
+                    <!-- Download options will be added here dynamically -->
                 </div>
             </div>
         </div>
@@ -250,5 +252,15 @@
     </footer>
 
     <script src="Script.js"></script>
+    <script>
+        // Custom JS for FAQ dropdowns
+        document.querySelectorAll('.faq-item').forEach(item => {
+            item.querySelector('.faq-question').addEventListener('click', () => {
+                const answer = item.querySelector('.faq-answer');
+                answer.style.maxHeight = answer.style.maxHeight ? null : answer.scrollHeight + "px";
+                item.classList.toggle('active');
+            });
+        });
+    </script>
 </body>
 </html>
