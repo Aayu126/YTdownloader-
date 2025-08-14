@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 4000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static files from the root of the project directory
+// Serve static files from the current directory
 app.use(express.static(__dirname));
 
 // Correctly serve your main HTML file for the root URL
