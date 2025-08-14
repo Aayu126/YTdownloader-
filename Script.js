@@ -1,178 +1,149 @@
+// Script.js
 document.addEventListener('DOMContentLoaded', () => {
-    // UI elements
-    const videoUrlInput = document.getElementById('videoUrl');
-    const searchBtn = document.getElementById('searchBtn');
-    const videoDetailsSection = document.getElementById('videoDetails');
-    const videoThumbnail = document.getElementById('videoThumbnail');
-    const videoTitle = document.getElementById('videoTitle');
-    const channelName = document.getElementById('channelName');
-    const videoDuration = document.getElementById('videoDuration');
-    const downloadOptionsDiv = document.getElementById('downloadOptions');
-    const loader = document.getElementById('loader');
-    const errorMessage = document.getElementById('errorMessage');
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const mainNav = document.getElementById('mainNav');
-    
-    // New format option buttons
-    const videoDownloadOptionBtn = document.getElementById('video-download-option');
-    const audioDownloadOptionBtn = document.getElementById('audio-download-option');
+  const apiBase = `${window.location.origin}`; // works on Railway and locally
 
-    // NEW: API Base URL from the user's provided snippet
-    const API_BASE = "https://ytdownloader-production-cb83.up.railway.app";
-    let currentVideoDetails = null;
+  const videoUrlInput = document.getElementById('videoUrl');
+  const searchBtn = document.getElementById('searchBtn');
+  const videoDetailsSection = document.getElementById('videoDetails');
+  const videoThumbnail = document.getElementById('videoThumbnail');
+  const videoTitle = document.getElementById('videoTitle');
+  const channelName = document.getElementById('channelName');
+  const videoDuration = document.getElementById('videoDuration');
+  const downloadOptionsDiv = document.getElementById('downloadOptions');
+  const loader = document.getElementById('loader');
+  const errorMessage = document.getElementById('errorMessage');
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const mainNav = document.getElementById('mainNav');
 
-    // Helper function to show toast notifications
-    function createNotification(message, details, type) {
-        const notification = document.createElement('div');
-        notification.className = `toast-notification show ${type}`;
-        notification.innerHTML = `
-            <div>
-                <strong>${message}</strong>
-                <p>${details}</p>
-            </div>
-        `;
-        document.body.appendChild(notification);
-        
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateY(100px)';
-            setTimeout(() => notification.remove(), 300);
-        }, 5000);
+  const videoDownloadOptionBtn = document.getElementById('video-download-option');
+  const audioDownloadOptionBtn = document.getElementById('audio-download-option');
+
+  let current = null;
+
+  function createNotification(message, details, type) {
+    const div = document.createElement('div');
+    div.className = `toast-notification show ${type}`;
+    div.innerHTML = `<div><strong>${message}</strong><p>${details || ''}</p></div>`;
+    document.body.appendChild(div);
+    setTimeout(() => {
+      div.style.opacity = '0';
+      div.style.transform = 'translateY(100px)';
+      setTimeout(() => div.remove(), 300);
+    }, 4000);
+  }
+
+  function dl(url) {
+    window.location.href = url;
+  }
+
+  function initiateVideoDownload(videoId, opt, audioItag) {
+    if (opt.isVideoOnly) {
+      // merge MP4 video-only + AAC
+      const u = `${apiBase}/api/hq-download?videoId=${encodeURIComponent(
+        videoId
+      )}&itag=${encodeURIComponent(opt.itag)}&audioItag=${encodeURIComponent(audioItag || 140)}`;
+      dl(u);
+      createNotification('Download started', `Merging ${opt.qualityLabel} (MP4)`, 'success');
+    } else {
+      // progressive MP4
+      const u = `${apiBase}/api/download?videoId=${encodeURIComponent(
+        videoId
+      )}&itag=${encodeURIComponent(opt.itag)}`;
+      dl(u);
+      createNotification('Download started', `${opt.qualityLabel} (MP4)`, 'success');
     }
+  }
 
-    // Function to initiate video download for combined streams
-    function initiateStandardDownload(videoId, itag, quality) {
-        const downloadUrl = `${API_BASE}/api/download?videoId=${videoId}&itag=${itag}`;
-        window.location.href = downloadUrl;
-        createNotification('Download Started!', `Your video (${quality}) is now downloading.`, 'success');
+  function initiateAudioDownload(videoId) {
+    const u = `${apiBase}/api/audio?videoId=${encodeURIComponent(videoId)}`;
+    dl(u);
+    createNotification('Audio download started', 'Fetching best available AAC audio', 'success');
+  }
+
+  async function fetchVideoInfo(url) {
+    loader.style.display = 'block';
+    errorMessage.style.display = 'none';
+    videoDetailsSection.style.display = 'none';
+    downloadOptionsDiv.innerHTML = '';
+
+    try {
+      const resp = await fetch(`${apiBase}/api/videoInfo?url=${encodeURIComponent(url)}`);
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || resp.statusText);
+      }
+      const data = await resp.json();
+      current = data;
+
+      const thumbs = data.videoDetails.thumbnails || [];
+      videoThumbnail.src = thumbs[thumbs.length - 1]?.url || thumbs[0]?.url || '';
+      videoTitle.textContent = data.videoDetails.title;
+      channelName.textContent = data.videoDetails.author?.name || '';
+      videoDuration.textContent = `Duration: ${formatDuration(+data.videoDetails.lengthSeconds || 0)}`;
+
+      videoDetailsSection.style.display = 'block';
+      updateDownloadButtons();
+    } catch (e) {
+      errorMessage.textContent = e.message;
+      errorMessage.style.display = 'block';
+      createNotification('Error', e.message, 'error');
+    } finally {
+      loader.style.display = 'none';
     }
-    
-    // NEW: Function to initiate high-quality video download by combining streams
-    function initiateHqDownload(videoId, itag, quality) {
-        const downloadUrl = `${API_BASE}/api/hq-download?videoId=${videoId}&itag=${itag}`;
-        window.location.href = downloadUrl;
-        createNotification('Download Started!', `Your high-quality video (${quality}) is now downloading. This may take a moment.`, 'success');
+  }
+
+  function updateDownloadButtons() {
+    if (!current) return;
+    downloadOptionsDiv.innerHTML = '';
+    const isVideo = videoDownloadOptionBtn.classList.contains('active');
+
+    if (isVideo) {
+      // Many options, unique by quality, already filtered server-side to MP4-compatible
+      const list = current.formats
+        .filter((f) => f.qualityLabel)
+        .sort((a, b) => (parseInt(b.qualityLabel) || 0) - (parseInt(a.qualityLabel) || 0));
+
+      list.forEach((opt) => {
+        const btn = document.createElement('button');
+        btn.className = 'download-btn';
+        btn.textContent = `${opt.qualityLabel}${opt.isVideoOnly ? ' (HQ merge)' : ''}`;
+        btn.onclick = () =>
+          initiateVideoDownload(current.videoDetails.videoId, opt, current.audioItag);
+        downloadOptionsDiv.appendChild(btn);
+      });
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'download-btn audio';
+      btn.textContent = 'Download Audio';
+      btn.onclick = () => initiateAudioDownload(current.videoDetails.videoId);
+      downloadOptionsDiv.appendChild(btn);
     }
+  }
 
-    // Function to initiate audio download
-    function initiateAudioDownload(videoId) {
-        const downloadUrl = `${API_BASE}/api/audio?videoId=${videoId}`;
-        window.location.href = downloadUrl;
-        createNotification('Audio Download Started!', `Your audio file is now downloading.`, 'success');
+  searchBtn.addEventListener('click', () => {
+    const url = videoUrlInput.value.trim();
+    if (!url) {
+      createNotification('Invalid URL', 'Please paste a YouTube URL.', 'error');
+      return;
     }
-    
-    // Function to fetch video info from the backend
-    async function fetchVideoInfo(url) {
-        loader.style.display = 'block';
-        errorMessage.style.display = 'none';
-        videoDetailsSection.style.display = 'none';
-        
-        try {
-            const response = await fetch(`${API_BASE}/api/videoInfo?url=${encodeURIComponent(url)}`);
-            
-            // Check for network errors (server not running)
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                if (response.status === 500 && !errorData.error) {
-                    throw new Error('Connection failed. Please ensure the backend server is running.');
-                }
-                throw new Error(errorData.error || `Error: ${response.statusText}`);
-            }
+    fetchVideoInfo(url);
+  });
 
-            const data = await response.json();
-            currentVideoDetails = data;
-            
-            // Populate video details
-            videoThumbnail.src = data.videoDetails.thumbnails[0].url;
-            videoTitle.textContent = data.videoDetails.title;
-            channelName.textContent = data.videoDetails.author.name;
-            videoDuration.textContent = `Duration: ${formatDuration(data.videoDetails.lengthSeconds)}`;
-            videoDetailsSection.style.display = 'block';
+  videoDownloadOptionBtn.addEventListener('click', () => {
+    videoDownloadOptionBtn.classList.add('active');
+    audioDownloadOptionBtn.classList.remove('active');
+    updateDownloadButtons();
+  });
 
-            updateDownloadOptions();
-            
-        } catch (error) {
-            errorMessage.textContent = error.message;
-            errorMessage.style.display = 'block';
-            createNotification('Error', error.message, 'error');
-        } finally {
-            loader.style.display = 'none';
-        }
-    }
+  audioDownloadOptionBtn.addEventListener('click', () => {
+    audioDownloadOptionBtn.classList.add('active');
+    videoDownloadOptionBtn.classList.remove('active');
+    updateDownloadButtons();
+  });
 
-    // Function to update the download buttons based on the selected format
-    function updateDownloadOptions() {
-        if (!currentVideoDetails) return;
-
-        downloadOptionsDiv.innerHTML = '';
-        const isVideoActive = videoDownloadOptionBtn.classList.contains('active');
-
-        if (isVideoActive) {
-            // Create download buttons for video
-            currentVideoDetails.formats.filter(f => f.qualityLabel).sort((a,b) => {
-                const aRes = parseInt(a.qualityLabel);
-                const bRes = parseInt(b.qualityLabel);
-                // Sort by resolution, highest first
-                return bRes - aRes;
-            }).forEach(format => {
-                const button = document.createElement('button');
-                button.className = 'download-btn';
-                button.innerHTML = `Download ${format.qualityLabel}`;
-                // Determine which download function to use based on the format type
-                if (format.hasAudio && format.hasVideo) {
-                    // This is a combined video/audio stream (standard download)
-                    button.onclick = () => initiateStandardDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
-                } else if (format.hasVideo && !format.hasAudio) {
-                    // This is a video-only stream, so we use the HQ download endpoint
-                    button.onclick = () => initiateHqDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
-                }
-                downloadOptionsDiv.appendChild(button);
-            });
-        } else {
-            // Create audio download button
-            const audioButton = document.createElement('button');
-            audioButton.className = 'download-btn audio';
-            audioButton.textContent = 'Download as MP3';
-            audioButton.onclick = () => initiateAudioDownload(currentVideoDetails.videoDetails.videoId);
-            downloadOptionsDiv.appendChild(audioButton);
-        }
-    }
-
-    // Event listeners
-    searchBtn.addEventListener('click', () => {
-        const url = videoUrlInput.value;
-        if (url) {
-            fetchVideoInfo(url);
-        } else {
-            createNotification('Invalid URL', 'Please enter a valid YouTube video URL.', 'error');
-        }
-    });
-
-    videoDownloadOptionBtn.addEventListener('click', () => {
-        videoDownloadOptionBtn.classList.add('active');
-        audioDownloadOptionBtn.classList.remove('active');
-        if (currentVideoDetails) {
-            updateDownloadOptions();
-        }
-    });
-
-    audioDownloadOptionBtn.addEventListener('click', () => {
-        audioDownloadOptionBtn.classList.add('active');
-        videoDownloadOptionBtn.classList.remove('active');
-        if (currentVideoDetails) {
-            updateDownloadOptions();
-        }
-    });
-
-    mobileMenuBtn.addEventListener('click', () => {
-        mainNav.querySelector('ul').classList.toggle('active');
-    });
-
-    // Simple duration formatter
-    function formatDuration(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
-    }
+  function formatDuration(total) {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
 });
