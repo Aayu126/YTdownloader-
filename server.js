@@ -1,12 +1,7 @@
-// Polyfill for File in Node.js
-import { Blob } from 'buffer';
-global.File = class File extends Blob {
-    constructor(chunks, filename, options = {}) {
-        super(chunks, options);
-        this.name = filename;
-        this.lastModified = options.lastModified || Date.now();
-    }
-};
+// Polyfill for File and Blob in Node.js
+import { Blob, File } from 'buffer';
+if (typeof globalThis.Blob === 'undefined') globalThis.Blob = Blob;
+if (typeof globalThis.File === 'undefined') globalThis.File = File;
 
 import express from 'express';
 import cors from 'cors';
