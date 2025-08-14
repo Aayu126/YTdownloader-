@@ -1,54 +1,21 @@
+// server.js
 import express from 'express';
 import cors from 'cors';
-import ytdl from '@distube/ytdl-core';
+import ytdl from '@distube/ytdl-core'; // Reverted back to a more stable version that supports user-agent
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { PassThrough } from 'stream';
 
 // Load environment variables from a .env file
 dotenv.config();
 
 // Create an Express application
 const app = express();
-
-// Enable CORS
+// Enable CORS to allow requests from your frontend
 app.use(cors());
 
 // Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
-
-// Resolve the directory name
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Serve static files from the project's root directory
-app.use(express.static(__dirname));
-
-// Correctly serve the main HTML file for the root URL
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'YT.html'));
-});
-
-// IMPORTANT: Define your proxy URL here using an environment variable
-const proxyUrl = process.env.HTTP_PROXY;
-
-// Check if a proxy URL is provided before creating the agent
-let proxyAgent = null;
-if (proxyUrl) {
-    proxyAgent = new HttpsProxyAgent(proxyUrl);
-}
-
-// Define request options to use the proxy agent and a user agent
-const requestOptions = {
-    requestOptions: {
-        client: proxyAgent, // FIX: Changed 'agent' to 'client' to fix the unsupported opts.agent error
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-        }
-    }
-};
 
 // Endpoint to get video information
 app.get('/api/videoInfo', async (req, res) => {
@@ -64,19 +31,29 @@ app.get('/api/videoInfo', async (req, res) => {
             return res.status(400).json({ error: 'Invalid YouTube URL' });
         }
 
-        const info = await ytdl.getInfo(cleanUrl, requestOptions);
+        // Add a user-agent header to the request to mimic a browser, helping to bypass bot detection.
+        const info = await ytdl.getInfo(cleanUrl, {
+            requestOptions: {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                },
+            },
+        });
+
+        const formats = info.formats;
+
         res.status(200).json({
             videoDetails: info.videoDetails,
-            formats: info.formats
+            formats: formats
         });
     } catch (error) {
         console.error('Error fetching video info:', error);
-        res.status(500).json({ error: error.message || 'Failed to fetch video information. It might be private, restricted, or an invalid link.' });
+        res.status(500).json({ error: 'Failed to fetch video information. It might be private, restricted, or an invalid link. ' + error.message });
     }
 });
 
-// Endpoint to download a standard video
-app.get('/api/download', async (req, res) => {
+// Endpoint to download a high-quality video by combining video and audio streams
+app.get('/api/hq-download', (req, res) => {
     try {
         const { videoId, itag } = req.query;
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -85,121 +62,61 @@ app.get('/api/download', async (req, res) => {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
 
-        const info = await ytdl.getInfo(videoId, requestOptions);
-        const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
-
-        res.header('Content-Disposition', `attachment; filename="${title}.mp4"`);
+        res.header('Content-Disposition', `attachment; filename="high-quality-video.mp4"`);
 
         const videoStream = ytdl(videoUrl, {
             filter: format => format.itag == itag,
-            ...requestOptions
         });
-
-        videoStream.on('error', (err) => {
-            console.error('ytdl stream error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({ error: err.message || 'Failed to download video stream.' });
-            }
-        });
-
-        videoStream.pipe(res);
-    } catch (error) {
-        console.error('Error downloading video:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download video.' });
-        }
-    }
-});
-
-// Endpoint to download a high-quality video by combining video and audio streams
-app.get('/api/hq-download', async (req, res) => {
-    try {
-        const { videoId } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
-
-        const info = await ytdl.getInfo(videoId, requestOptions);
-        const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
-
-        const videoFormat = ytdl.chooseFormat(info.formats, { filter: 'videoonly', quality: 'highestvideo' });
-        const audioFormat = ytdl.chooseFormat(info.formats, { filter: 'audioonly', quality: 'highestaudio' });
-
-        if (!videoFormat || !audioFormat) {
-            return res.status(500).send('Could not find both video and audio streams.');
-        }
-
-        res.header('Content-Disposition', `attachment; filename="${title}.mp4"`);
-        res.header('Content-Type', 'video/mp4');
-
-        const ffmpegProcess = ffmpeg()
-            .input(ytdl(videoUrl, { format: videoFormat, ...requestOptions }))
-            .input(ytdl(videoUrl, { format: audioFormat, ...requestOptions }))
-            .videoCodec('copy')
-            .audioCodec('copy')
-            .format('mp4')
-            .on('error', (err) => {
-                console.error('FFmpeg error:', err.message);
-                if (!res.headersSent) {
-                    res.status(500).json({ error: 'FFmpeg processing failed: ' + err.message });
-                }
-            })
-            .pipe(res, { end: true });
-
-        res.once('close', () => {
-            if (ffmpegProcess && !ffmpegProcess.killed) {
-                ffmpegProcess.kill('SIGKILL');
-            }
-        });
-    } catch (error) {
-        console.error('Error in hq-download route:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download video.' });
-        }
-    }
-});
-
-// Endpoint to download audio
-app.get('/api/audio', async (req, res) => {
-    try {
-        const { videoId } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-        if (!ytdl.validateID(videoId)) {
-            return res.status(400).json({ error: 'Invalid video ID' });
-        }
-
-        const info = await ytdl.getInfo(videoId, requestOptions);
-        const title = info.videoDetails.title.replace(/[^\w\s]/gi, '');
-
-        res.header('Content-Disposition', `attachment; filename="${title}.mp3"`);
 
         const audioStream = ytdl(videoUrl, {
             filter: 'audioonly',
             quality: 'highestaudio',
-            ...requestOptions
         });
 
-        audioStream.on('error', (err) => {
-            console.error('ytdl stream error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({ error: err.message || 'Failed to download audio stream.' });
-            }
-        });
+        // Use a PassThrough stream to handle progress
+        const passThrough = new PassThrough();
 
-        audioStream.pipe(res);
+        // Use ffmpeg to combine the video and audio streams and pipe them to the response
+        ffmpeg()
+            .input(videoStream)
+            .videoCodec('copy') // Copy the video codec to avoid re-encoding
+            .input(audioStream)
+            .audioCodec('copy') // Copy the audio codec to avoid re-encoding
+            .format('mp4')
+            .on('error', (err) => {
+                console.error('ffmpeg error:', err);
+                res.status(500).send('Error during video processing');
+            })
+            .on('progress', (progress) => {
+                // You can log progress here for debugging on the server side
+                console.log('Processing: ' + progress.percent + '% done');
+            })
+            .pipe(res, { end: true });
+    } catch (error) {
+        console.error('Error downloading video:', error);
+        res.status(500).json({ error: 'Failed to download video.' });
+    }
+});
 
-        res.once('close', () => {
-            audioStream.destroy();
-        });
+// Endpoint to download audio
+app.get('/api/audio', (req, res) => {
+    try {
+        const { videoId } = req.query;
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
+        if (!ytdl.validateID(videoId)) {
+            return res.status(400).json({ error: 'Invalid video ID' });
+        }
+
+        res.header('Content-Disposition', `attachment; filename="audio.mp3"`);
+
+        ytdl(videoUrl, {
+            filter: 'audioonly',
+            quality: 'highestaudio'
+        }).pipe(res);
     } catch (error) {
         console.error('Error downloading audio:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download audio.' });
-        }
+        res.status(500).json({ error: 'Failed to download audio.' });
     }
 });
 
