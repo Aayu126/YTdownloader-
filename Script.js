@@ -1,5 +1,7 @@
-// Script.js
 document.addEventListener('DOMContentLoaded', () => {
+    // CHANGE THIS TO YOUR DEPLOYED RAILWAY BACKEND URL
+    const BASE_API = "https://ytdownloader-production-cb83.up.railway.app";
+
     // UI elements
     const videoUrlInput = document.getElementById('videoUrl');
     const searchBtn = document.getElementById('searchBtn');
@@ -13,16 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorMessage = document.getElementById('errorMessage');
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const mainNav = document.getElementById('mainNav');
-    const downloadProgressContainer = document.getElementById('downloadProgressContainer');
-    const progressBar = document.getElementById('progressBar');
-    
-    // New format option buttons
+
     const videoDownloadOptionBtn = document.getElementById('video-download-option');
     const audioDownloadOptionBtn = document.getElementById('audio-download-option');
 
     let currentVideoDetails = null;
 
-    // Helper function to show toast notifications
     function createNotification(message, details, type) {
         const notification = document.createElement('div');
         notification.className = `toast-notification show ${type}`;
@@ -35,46 +33,43 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(notification);
         
         setTimeout(() => {
-            notification.classList.remove('show');
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(100px)';
             setTimeout(() => notification.remove(), 300);
         }, 5000);
     }
 
-    // Function to initiate video download
     function initiateDownload(videoId, itag, quality) {
-        const downloadUrl = `/api/hq-download?videoId=${videoId}&itag=${itag}`;
+        const downloadUrl = `${BASE_API}/api/download?videoId=${videoId}&itag=${itag}`;
         window.location.href = downloadUrl;
         createNotification('Download Started!', `Your video (${quality}) is now downloading.`, 'success');
-        showProgressBar();
     }
 
-    // Function to initiate audio download
     function initiateAudioDownload(videoId) {
-        const downloadUrl = `/api/audio?videoId=${videoId}`;
+        const downloadUrl = `${BASE_API}/api/audio?videoId=${videoId}`;
         window.location.href = downloadUrl;
         createNotification('Audio Download Started!', `Your audio file is now downloading.`, 'success');
-        showProgressBar();
     }
-    
-    // Function to fetch video info from the backend
+
     async function fetchVideoInfo(url) {
         loader.style.display = 'block';
         errorMessage.style.display = 'none';
         videoDetailsSection.style.display = 'none';
-        downloadProgressContainer.style.display = 'none';
-
+        
         try {
-            const response = await fetch(`/api/videoInfo?url=${encodeURIComponent(url)}`);
+            const response = await fetch(`${BASE_API}/api/videoInfo?url=${encodeURIComponent(url)}`);
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                if (response.status === 500 && !errorData.error) {
+                    throw new Error('Connection failed. Please ensure the backend server is running.');
+                }
                 throw new Error(errorData.error || `Error: ${response.statusText}`);
             }
 
             const data = await response.json();
             currentVideoDetails = data;
             
-            // Populate video details
             videoThumbnail.src = data.videoDetails.thumbnails[0].url;
             videoTitle.textContent = data.videoDetails.title;
             channelName.textContent = data.videoDetails.author.name;
@@ -92,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Function to update the download buttons based on the selected format
     function updateDownloadOptions() {
         if (!currentVideoDetails) return;
 
@@ -100,13 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const isVideoActive = videoDownloadOptionBtn.classList.contains('active');
 
         if (isVideoActive) {
-            currentVideoDetails.formats
-                .filter(f => f.qualityLabel)
-                .sort((a,b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel))
-                .forEach(format => {
+            currentVideoDetails.formats.filter(f => f.qualityLabel).sort((a,b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel)).forEach(format => {
                 const button = document.createElement('button');
                 button.className = 'download-btn';
-                button.textContent = `Download ${format.qualityLabel}`;
+                button.innerHTML = `Download ${format.qualityLabel}`;
                 button.onclick = () => initiateDownload(currentVideoDetails.videoDetails.videoId, format.itag, format.qualityLabel);
                 downloadOptionsDiv.appendChild(button);
             });
@@ -119,21 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function showProgressBar() {
-        downloadProgressContainer.style.display = 'block';
-        progressBar.style.width = '0%';
-        let progress = 0;
-        const interval = setInterval(() => {
-            if (progress >= 99) {
-                clearInterval(interval);
-            } else {
-                progress += Math.random() * 5; 
-                progressBar.style.width = `${progress}%`;
-            }
-        }, 1000);
-    }
-
-    // Event listeners
     searchBtn.addEventListener('click', () => {
         const url = videoUrlInput.value;
         if (url) {
@@ -160,21 +136,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     mobileMenuBtn.addEventListener('click', () => {
-        mainNav.querySelector('ul').classList.toggle('active');
+        mainNav.classList.toggle('active');
     });
 
-    // Simple duration formatter
     function formatDuration(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
-
-    document.querySelectorAll('.faq-item').forEach(item => {
-        item.querySelector('.faq-question').addEventListener('click', () => {
-            const answer = item.querySelector('.faq-answer');
-            answer.style.maxHeight = answer.style.maxHeight ? null : answer.scrollHeight + "px";
-            item.classList.toggle('active');
-        });
-    });
 });
