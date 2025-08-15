@@ -401,13 +401,9 @@ nav a:hover {
     transition: max-height 0.3s ease;
 }
 
-.faq-item.active .faq-answer {
-    max-height: 200px; /* Adjust as needed */
+.faq-answer.active {
     padding: 0 20px 15px;
-}
-
-.faq-item.active .faq-question i {
-    transform: rotate(180deg);
+    max-height: 200px;
 }
 
 footer {
@@ -594,34 +590,77 @@ footer {
     }
 
 }
+
+/* Dark mode styles */
+.dark-mode {
+    background-color: #121212;
+    color: #f5f5f5;
+}
+
+.dark-mode .feature-card,
+.dark-mode .search-container,
+.dark-mode .video-details,
+.dark-mode .faq-item {
+    background-color: #1e1e1e;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .format-option {
+    background-color: #333;
+    color: #f5f5f5;
+}
+
+.dark-mode .input-group input {
+    background-color: #333;
+    border-color: #444;
+    color: #f5f5f5;
+}
+
+.dark-mode .info-text p,
+.dark-mode .section-title p {
+    color: #bbb;
+}
+
+/* Additional animation for UI elements */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease forwards;
+}
+
 /* Toast notification styles */
-.toast-notification {
+.toast {
     position: fixed;
-    bottom: 1rem;
-    right: 1rem;
+    bottom: 20px;
+    right: 20px;
     background-color: var(--success);
     color: white;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 12px 20px;
+    border-radius: 5px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
     display: flex;
     align-items: center;
     gap: 10px;
     z-index: 1000;
-    transform: translateY(100%);
+    transform: translateY(100px);
     opacity: 0;
-    transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+    transition: transform 0.3s, opacity 0.3s;
 }
-.toast-notification.show {
+
+.toast.show {
     transform: translateY(0);
     opacity: 1;
 }
-.toast-notification.error {
+
+.toast.error {
     background-color: var(--danger);
 }
 
 /* Progress bar styles */
-.download-progress-container {
+.progress-container {
     width: 100%;
     background-color: #f0f0f0;
     border-radius: 5px;
@@ -629,9 +668,74 @@ footer {
     overflow: hidden;
     display: none;
 }
+
 .progress-bar {
     height: 10px;
     background-color: var(--primary);
     width: 0%;
     transition: width 0.3s;
+}
+
+/* Theme toggle switch */
+.theme-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 30px;
+}
+
+.theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--primary);
+}
+
+input:checked + .slider:before {
+    transform: translateX(30px);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
