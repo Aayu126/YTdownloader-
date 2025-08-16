@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import ytdl from 'ytdl-core';   // ✅ correct import
+import ytdl from 'ytdl-core';   // ✅ use official ytdl-core (not distube fork)
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
@@ -17,6 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 4000;
 
+// --- Root test endpoint ---
 app.get('/api', (req, res) => {
   res.status(200).json({ message: 'Welcome to the YouTube Downloader API!' });
 });
@@ -32,20 +33,21 @@ app.get('/api/videoInfo', async (req, res) => {
     const info = await ytdl.getInfo(url, {
       requestOptions: {
         headers: {
-          // ✅ Spoof User-Agent to bypass bot detection
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
         },
       },
     });
 
     res.status(200).json({
       videoDetails: info.videoDetails,
-      formats: info.formats.filter(f => f.url), // only return formats with a valid URL
+      formats: info.formats.filter(f => f.url),
     });
   } catch (error) {
     console.error('Detailed error fetching video info:', error);
     res.status(500).json({
-      error: 'Failed to fetch video information. It might be private, restricted, or an invalid link.'
+      error:
+        'Failed to fetch video information. It might be private, restricted, or an invalid link.',
     });
   }
 });
@@ -57,6 +59,7 @@ app.get('/api/download', async (req, res) => {
     if (!ytdl.validateID(videoId)) {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
+
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const safeTitle = (title || 'video')
       .replace(/[^a-zA-Z0-9\s-]/g, '')
@@ -75,9 +78,12 @@ app.get('/api/download', async (req, res) => {
       console.log(`✅ Fast download: ${title}`);
       ytdl(videoUrl, { quality: itag }).pipe(res);
     } else {
-      console.log(`⚡ Slow download (merging with ffmpeg): ${title}`);
+      console.log(`⚡ Slow download (ffmpeg merge): ${title}`);
       const videoStream = ytdl(videoUrl, { filter: f => f.itag == itag });
-      const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
+      const audioStream = ytdl(videoUrl, {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+      });
 
       ffmpeg()
         .input(videoStream)
@@ -86,9 +92,10 @@ app.get('/api/download', async (req, res) => {
         .audioCodec('aac')
         .format('mp4')
         .outputOptions('-movflags', 'frag_keyframe+empty_moov')
-        .on('error', (err) => {
+        .on('error', err => {
           console.error('ffmpeg error:', err.message);
-          if (!res.headersSent) res.status(500).send('Error during video processing');
+          if (!res.headersSent)
+            res.status(500).send('Error during video processing');
         })
         .pipe(res, { end: true });
     }
@@ -107,6 +114,7 @@ app.get('/api/audio', (req, res) => {
     if (!ytdl.validateID(videoId)) {
       return res.status(400).json({ error: 'Invalid video ID' });
     }
+
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const safeTitle = (title || 'audio')
       .replace(/[^a-zA-Z0-9\s-]/g, '')
@@ -117,9 +125,10 @@ app.get('/api/audio', (req, res) => {
     ffmpeg(ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' }))
       .audioCodec('libmp3lame')
       .format('mp3')
-      .on('error', (err) => {
+      .on('error', err => {
         console.error('ffmpeg error:', err.message);
-        if (!res.headersSent) res.status(500).send('Error during audio processing');
+        if (!res.headersSent)
+          res.status(500).send('Error during audio processing');
       })
       .pipe(res, { end: true });
   } catch (error) {
@@ -133,4 +142,3 @@ app.get('/api/audio', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
-npm uninstall @distube/ytdl-core
