@@ -35,9 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
             notification.classList.remove('show');
             setTimeout(() => notification.remove(), 300);
         }, 5000);
-        }
-        // Add missing closing brace for DOMContentLoaded event listener
-    });
+    }
 
     function initiateDownload(videoId, itag, title) {
         const downloadUrl = `${API_BASE_URL}/api/download?videoId=${videoId}&itag=${itag}&title=${encodeURIComponent(title)}`;
@@ -58,18 +56,115 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             const response = await fetch(`${API_BASE_URL}/api/videoInfo?url=${encodeURIComponent(url)}`);
-            const data = await response.json();
-
-            if (response.ok) {
-                currentVideoDetails = data.videoDetails;
-                displayVideoDetails(currentVideoDetails);
-            } else {
-                throw new Error(data.error || 'Unknown error');
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Error: ${response.statusText}`);
             }
+
+            const data = await response.json();
+            currentVideoDetails = data;
+            
+            videoThumbnail.src = data.videoDetails.thumbnails[data.videoDetails.thumbnails.length - 1].url;
+            videoTitle.textContent = data.videoDetails.title;
+            channelName.textContent = data.videoDetails.author.name;
+            videoDuration.textContent = `Duration: ${formatDuration(data.videoDetails.lengthSeconds)}`;
+            videoViews.textContent = `Views: ${Number(data.videoDetails.viewCount).toLocaleString()}`;
+            
+            videoDetailsSection.style.display = 'flex';
+            updateDownloadOptions();
+            
         } catch (error) {
-            console.error('Error fetching video info:', error);
-            createNotification('Error Fetching Video Info', error.message, 'error');
+            errorMessage.textContent = error.message;
+            errorMessage.style.display = 'block';
+            createNotification('Error', error.message, 'error');
         } finally {
             loader.style.display = 'none';
         }
     }
+
+    function updateDownloadOptions() {
+        if (!currentVideoDetails) return;
+
+        downloadOptionsDiv.innerHTML = '';
+        const { videoId, title } = currentVideoDetails.videoDetails;
+        const isVideoActive = videoDownloadOptionBtn.classList.contains('active');
+
+        if (isVideoActive) {
+            const uniqueQualities = {};
+            currentVideoDetails.formats
+                .filter(f => f.qualityLabel && f.container === 'mp4' && f.hasVideo)
+                .forEach(f => {
+                    if (!uniqueQualities[f.qualityLabel]) {
+                        uniqueQualities[f.qualityLabel] = f;
+                    }
+                });
+
+            Object.values(uniqueQualities)
+                .sort((a,b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel))
+                .forEach(format => {
+                    const button = document.createElement('button');
+                    button.className = 'download-btn';
+                    
+                    // ✨ Add a label to show if the download is fast or slow
+                    const speedLabel = format.hasAudio ? '(Fast)' : '(Slow - Processing)';
+                    button.innerHTML = `Download ${format.qualityLabel} <span class="speed-label">${speedLabel}</span>`;
+
+                    button.onclick = () => initiateDownload(videoId, format.itag, title);
+                    downloadOptionsDiv.appendChild(button);
+                });
+        } else {
+            const audioButton = document.createElement('button');
+            audioButton.className = 'download-btn audio';
+            audioButton.textContent = 'Download as MP3';
+            audioButton.onclick = () => initiateAudioDownload(videoId, title);
+            downloadOptionsDiv.appendChild(audioButton);
+        }
+    }
+
+    // --- ✅ THIS SECTION WAS MISSING ---
+    // Event listeners that make the buttons work
+    searchBtn.addEventListener('click', () => {
+        const url = videoUrlInput.value.trim();
+        if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+            fetchVideoInfo(url);
+        } else {
+            createNotification('Invalid URL', 'Please enter a valid YouTube video URL.', 'error');
+        }
+    });
+    
+    // ✨ Added feature: Press Enter to search
+    videoUrlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchBtn.click();
+        }
+    });
+
+    videoDownloadOptionBtn.addEventListener('click', () => {
+        videoDownloadOptionBtn.classList.add('active');
+        audioDownloadOptionBtn.classList.remove('active');
+        if (currentVideoDetails) {
+            updateDownloadOptions();
+        }
+    });
+
+    audioDownloadOptionBtn.addEventListener('click', () => {
+        audioDownloadOptionBtn.classList.add('active');
+        videoDownloadOptionBtn.classList.remove('active');
+        if (currentVideoDetails) {
+            updateDownloadOptions();
+        }
+    });
+
+    mobileMenuBtn.addEventListener('click', () => {
+        mainNav.querySelector('ul').classList.toggle('active');
+    });
+    // --- END OF MISSING SECTION ---
+
+    function formatDuration(seconds) {
+        if (isNaN(seconds)) return '00:00';
+        const date = new Date(null);
+        date.setSeconds(parseInt(seconds));
+        return date.toISOString().substr(11, 8);
+    }
+});
