@@ -6,130 +6,116 @@ import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Load environment variables from a .env file
 dotenv.config();
 
-// --- FIX: Setup for ES Modules to handle __dirname ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create an Express application
 const app = express();
-// Enable CORS to allow requests from your frontend
 app.use(cors());
-
-// --- FIX: Serve the frontend static files from the 'public' directory ---
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
-// Welcome endpoint for the API itself
 app.get('/api', (req, res) => {
     res.status(200).json({ message: 'Welcome to the YouTube Downloader API! Use /videoInfo and /download endpoints.' });
 });
 
-// Endpoint to get video information
 app.get('/api/videoInfo', async (req, res) => {
     try {
         const { url } = req.query;
-        if (!url) {
-            return res.status(400).json({ error: 'Please provide a YouTube URL' });
-        }
-        
-        const cleanUrl = url.split('&')[0];
-
-        if (!ytdl.validateURL(cleanUrl)) {
-            return res.status(400).json({ error: 'Invalid YouTube URL' });
+        if (!url || !ytdl.validateURL(url)) {
+            return res.status(400).json({ error: 'Invalid or missing YouTube URL' });
         }
 
-        const info = await ytdl.getInfo(cleanUrl);
+        // --- FIX: Add request options to mimic a browser, which helps prevent blocking ---
+        const info = await ytdl.getInfo(url, {
+            requestOptions: {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.101 Safari/537.36',
+                },
+            },
+        });
         
         res.status(200).json({
             videoDetails: info.videoDetails,
-            formats: ytdl.filterFormats(info.formats, 'videoandaudio')
+            formats: info.formats
         });
     } catch (error) {
-        console.error('Error fetching video info:', error.message);
+        // --- FIX: Log the actual error to the server console for better debugging ---
+        console.error('Detailed error fetching video info:', error);
         res.status(500).json({ error: 'Failed to fetch video information. It might be private, restricted, or an invalid link.' });
     }
 });
 
-// Main endpoint to download video
+// --- FIX: Reverted to the more robust download method for high-quality video ---
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag, title } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-        
-        // --- FIX: Improved filename sanitization ---
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
         const safeTitle = (title || 'video').replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
+        
         res.header('Content-Disposition', `attachment; filename="${safeTitle}.mp4"`);
 
-        const videoStream = ytdl(videoUrl, { quality: itag });
+        const videoStream = ytdl(videoUrl, { filter: format => format.itag == itag });
+        const audioStream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' });
 
-        // Pipe the video stream directly to ffmpeg
-        ffmpeg(videoStream)
-            .audioCodec('aac')
+        ffmpeg()
+            .input(videoStream)
             .videoCodec('copy')
+            .input(audioStream)
+            .audioCodec('aac')
             .format('mp4')
-            .on('error', (err) => {
+            .outputOptions('-movflags', 'frag_keyframe+empty_moov')
+            .on('error', (err, stdout, stderr) => {
                 console.error('ffmpeg error:', err.message);
+                console.error('ffmpeg stderr:', stderr);
                 if (!res.headersSent) {
                     res.status(500).send('Error during video processing');
                 }
             })
             .pipe(res, { end: true });
-
     } catch (error) {
-        console.error('Error downloading video:', error.message);
+        console.error('Error during download setup:', error);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download video.' });
+            res.status(500).json({ error: 'Failed to start video download.' });
         }
     }
 });
 
-
-// Endpoint to download audio only, converted to MP3
 app.get('/api/audio', (req, res) => {
     try {
         const { videoId, title } = req.query;
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-        
-        // --- FIX: Improved filename sanitization ---
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
         const safeTitle = (title || 'audio').replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
+
         res.header('Content-Disposition', `attachment; filename="${safeTitle}.mp3"`);
 
-        // Use ffmpeg to convert to MP3
-        ffmpeg()
-            .input(ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' }))
+        ffmpeg(ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' }))
             .audioCodec('libmp3lame')
             .format('mp3')
-            .on('error', (err) => {
+            .on('error', (err, stdout, stderr) => {
                 console.error('ffmpeg error:', err.message);
+                console.error('ffmpeg stderr:', stderr);
                 if (!res.headersSent) {
                     res.status(500).send('Error during audio processing');
                 }
             })
             .pipe(res, { end: true });
-
     } catch (error) {
-        console.error('Error downloading audio:', error.message);
+        console.error('Error during audio setup:', error);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download audio.' });
+            res.status(500).json({ error: 'Failed to start audio download.' });
         }
     }
 });
 
-
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
