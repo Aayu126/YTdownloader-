@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import ytdl from 'ytdl-core';
+import ytdl from 'ytdl-core';   // ✅ correct import
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
