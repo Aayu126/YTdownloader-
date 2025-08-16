@@ -3,22 +3,30 @@ import cors from 'cors';
 import ytdl from '@distube/ytdl-core';
 import dotenv from 'dotenv';
 import ffmpeg from 'fluent-ffmpeg';
-import { PassThrough } from 'stream';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Load environment variables from a .env file
 dotenv.config();
+
+// --- FIX: Setup for ES Modules to handle __dirname ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Create an Express application
 const app = express();
 // Enable CORS to allow requests from your frontend
 app.use(cors());
 
+// --- FIX: Serve the frontend static files from the 'public' directory ---
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
-// --- FIX: Add a root endpoint to handle base URL requests ---
-app.get('/', (req, res) => {
-    res.status(200).json({ message: 'Welcome to the YouTube Downloader API! Use the /api endpoints to fetch video info and download content.' });
+// Welcome endpoint for the API itself
+app.get('/api', (req, res) => {
+    res.status(200).json({ message: 'Welcome to the YouTube Downloader API! Use /videoInfo and /download endpoints.' });
 });
 
 // Endpoint to get video information
@@ -36,11 +44,10 @@ app.get('/api/videoInfo', async (req, res) => {
         }
 
         const info = await ytdl.getInfo(cleanUrl);
-        const formats = info.formats;
-
+        
         res.status(200).json({
             videoDetails: info.videoDetails,
-            formats: formats
+            formats: ytdl.filterFormats(info.formats, 'videoandaudio')
         });
     } catch (error) {
         console.error('Error fetching video info:', error.message);
@@ -48,7 +55,7 @@ app.get('/api/videoInfo', async (req, res) => {
     }
 });
 
-// --- FIX: Main endpoint to download high-quality video by combining streams ---
+// Main endpoint to download video
 app.get('/api/download', (req, res) => {
     try {
         const { videoId, itag, title } = req.query;
@@ -57,34 +64,20 @@ app.get('/api/download', (req, res) => {
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-
-        // Get the video stream (video only, based on the provided itag)
-        const videoStream = ytdl(videoUrl, {
-            filter: format => format.itag == itag
-        });
-
-        // Get the audio stream (highest quality audio)
-        const audioStream = ytdl(videoUrl, {
-            filter: 'audioonly',
-            quality: 'highestaudio'
-        });
-
-        const safeTitle = (title || 'video').replace(/[^a-zA-Z0-9\s]/g, '_');
+        
+        // --- FIX: Improved filename sanitization ---
+        const safeTitle = (title || 'video').replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
         res.header('Content-Disposition', `attachment; filename="${safeTitle}.mp4"`);
 
-        // Use ffmpeg to combine the video and audio streams
-        ffmpeg()
-            .input(videoStream)
-            .videoCodec('copy') // Copy the video codec to avoid re-encoding
-            .input(audioStream)
-            .audioCodec('aac') // Re-encode audio to AAC for max compatibility
+        const videoStream = ytdl(videoUrl, { quality: itag });
+
+        // Pipe the video stream directly to ffmpeg
+        ffmpeg(videoStream)
+            .audioCodec('aac')
+            .videoCodec('copy')
             .format('mp4')
-            // Add movflags for better streaming support (important for web players)
-            .outputOptions('-movflags', 'frag_keyframe+empty_moov')
-            .on('error', (err, stdout, stderr) => {
+            .on('error', (err) => {
                 console.error('ffmpeg error:', err.message);
-                console.error('ffmpeg stderr:', stderr);
-                // Don't try to send a response if headers are already sent
                 if (!res.headersSent) {
                     res.status(500).send('Error during video processing');
                 }
@@ -100,7 +93,7 @@ app.get('/api/download', (req, res) => {
 });
 
 
-// --- FIX: Endpoint to download audio only, converted to MP3 ---
+// Endpoint to download audio only, converted to MP3
 app.get('/api/audio', (req, res) => {
     try {
         const { videoId, title } = req.query;
@@ -109,18 +102,18 @@ app.get('/api/audio', (req, res) => {
         if (!ytdl.validateID(videoId)) {
             return res.status(400).json({ error: 'Invalid video ID' });
         }
-
-        const safeTitle = (title || 'audio').replace(/[^a-zA-Z0-9\s]/g, '_');
+        
+        // --- FIX: Improved filename sanitization ---
+        const safeTitle = (title || 'audio').replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
         res.header('Content-Disposition', `attachment; filename="${safeTitle}.mp3"`);
 
         // Use ffmpeg to convert to MP3
         ffmpeg()
             .input(ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio' }))
-            .audioCodec('libmp3lame') // Convert to MP3
+            .audioCodec('libmp3lame')
             .format('mp3')
-            .on('error', (err, stdout, stderr) => {
+            .on('error', (err) => {
                 console.error('ffmpeg error:', err.message);
-                console.error('ffmpeg stderr:', stderr);
                 if (!res.headersSent) {
                     res.status(500).send('Error during audio processing');
                 }
@@ -138,5 +131,5 @@ app.get('/api/audio', (req, res) => {
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
 });
