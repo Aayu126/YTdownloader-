@@ -1,9 +1,0 @@
-# nixpacks.toml
-
-[phases.setup]
-# This line tells Railway's build system to install the ffmpeg package.
-nixPkgs = ["...", "ffmpeg"]
-
-[start]
-# This line tells Railway how to start your application.
-command = "npm start"
