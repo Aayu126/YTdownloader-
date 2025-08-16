@@ -16,6 +16,11 @@ app.use(cors());
 // Define the port for the server, using the environment variable or defaulting to 4000
 const PORT = process.env.PORT || 4000;
 
+// --- NEW: Add a root endpoint to handle base URL requests ---
+app.get('/', (req, res) => {
+    res.status(200).json({ message: 'Welcome to the YouTube Downloader API! Use the /api endpoints to fetch video info and download content.' });
+});
+
 // Endpoint to get video information
 app.get('/api/videoInfo', async (req, res) => {
     try {
