@@ -1,6 +1,5 @@
 from flask import Flask, request, send_file, jsonify, render_template
 from pytube import YouTube
-from flask_cors import CORS
 import os
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
