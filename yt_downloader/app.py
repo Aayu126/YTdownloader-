@@ -1,13 +1,15 @@
 from flask import Flask, render_template, request, send_file, jsonify
-from pytube import YouTube, request as pytube_request
+from pytube import YouTube
+import pytube.request as pytube_request
 import os
 
-# ✅ Force a real browser User-Agent so YouTube accepts requests
-pytube_request.default_headers["User-Agent"] = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/117.0.0.0 Safari/537.36"
-)
+# ✅ Patch User-Agent only if the attribute exists
+if hasattr(pytube_request, "default_headers"):
+    pytube_request.default_headers["User-Agent"] = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/117.0.0.0 Safari/537.36"
+    )
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
