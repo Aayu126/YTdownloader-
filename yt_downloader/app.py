@@ -1,15 +1,14 @@
-from flask import Flask, request, send_file, jsonify, render_template
+from flask import Flask, render_template, request, send_file, jsonify
 from pytube import YouTube
 import os
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
-CORS(app)
 
 DOWNLOAD_FOLDER = './downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-@app.route('/')
+@app.route("/")
 def home():
     return render_template("index.html")
 
