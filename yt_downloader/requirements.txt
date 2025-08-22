@@ -1,4 +1,4 @@
 Flask==3.0.3
 Flask-Cors==4.0.0
-pytube==15.0.0
+git+https://github.com/pytube/pytube
 gunicorn==21.2.0
