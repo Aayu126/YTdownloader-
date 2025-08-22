@@ -1,4 +1,5 @@
-const API_BASE_URL = "https://ytdownloader-production-adef.up.railway.app";
+// Script.js
+const API_BASE_URL = ""; // same origin (recommended)
 
 document.addEventListener('DOMContentLoaded', () => {
   const videoUrlInput = document.getElementById('videoUrl');
