@@ -1,5 +1,5 @@
 // Set your deployed backend here. If you change your Railway URL, update this.
-const API_BASE_URL = 'https://ytdownloader-production-cb83.up.railway.app';
+const API_BASE_URL = 'https://ytdownloader-production-b9c0.up.railway.app';
 
 document.addEventListener('DOMContentLoaded', () => {
   const videoUrlInput = document.getElementById('videoUrl');
