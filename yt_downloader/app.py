@@ -1,21 +1,26 @@
 from flask import Flask, render_template, request, send_file, jsonify
-from pytube import YouTube, request as pytube_request
+from pytube import YouTube
 import os
+import urllib.request
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# ---- Fix for YouTube 400 Error (set headers) ----
-pytube_request.default_headers["User-Agent"] = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/114.0.0.0 Safari/537.36"
-)
+# ---- Fix for YouTube 400 Error (force User-Agent globally) ----
+opener = urllib.request.build_opener()
+opener.addheaders = [
+    (
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/114.0.0.0 Safari/537.36"
+    )
+]
+urllib.request.install_opener(opener)
 
 # ---- Downloads Folder ----
 DOWNLOAD_FOLDER = './downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
-
 
 # ---------- Serve Frontend ----------
 @app.route("/")
