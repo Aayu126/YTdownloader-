@@ -1,9 +1,9 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, render_template
 from pytube import YouTube
 from flask_cors import CORS
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
 
 DOWNLOAD_FOLDER = './downloads'
@@ -11,8 +11,8 @@ if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
 @app.route('/')
-def health():
-    return jsonify({"status": "ok"})
+def home():
+    return render_template("index.html")
 
 @app.route('/api/videoInfo', methods=['GET'])
 def get_video_info():
