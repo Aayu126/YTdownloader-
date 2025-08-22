@@ -1,39 +1,68 @@
 from flask import Flask, render_template, request, send_file, jsonify
-from pytube import YouTube
+from pytube import YouTube, request as pytube_request
 import os
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# Downloads folder
+# ---- Fix for YouTube 400 Error (set headers) ----
+pytube_request.default_headers["User-Agent"] = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/114.0.0.0 Safari/537.36"
+)
+
+# ---- Downloads Folder ----
 DOWNLOAD_FOLDER = './downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-# ---------- Main Website ----------
+
+# ---------- Serve Frontend ----------
 @app.route("/")
 def home():
     return render_template("index.html")
+
 
 # ---------- Health Check ----------
 @app.route("/api/health")
 def health():
     return {"status": "ok"}
 
+
 # ---------- Get Video Info ----------
 @app.route("/api/videoInfo", methods=["GET"])
 def get_video_info():
     url = request.args.get("url")
+    video_id = request.args.get("videoId")
+
     try:
+        # Build full URL if only videoId is provided
+        if not url and video_id:
+            url = f"https://www.youtube.com/watch?v={video_id}"
+
         yt = YouTube(url)
         video_details = {
             "title": yt.title,
             "author": {"name": yt.author},
             "lengthSeconds": yt.length,
             "viewCount": yt.views,
-            "thumbnails": [{"url": yt.thumbnail_url}]
+            "thumbnails": [{"url": yt.thumbnail_url}],
+            "videoId": yt.video_id
         }
-        formats = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc()
-        formats = [f.itag for f in formats]
+
+        # Build formats list with full info
+        formats = []
+        for stream in yt.streams.filter(file_extension="mp4"):
+            formats.append({
+                "itag": stream.itag,
+                "mime_type": stream.mime_type,
+                "resolution": stream.resolution,
+                "abr": stream.abr,
+                "hasVideo": stream.includes_video_track,
+                "hasAudio": stream.includes_audio_track,
+                "container": stream.subtype,
+                "qualityLabel": stream.resolution or stream.abr
+            })
 
         return jsonify({
             "videoDetails": video_details,
@@ -41,6 +70,7 @@ def get_video_info():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
 
 # ---------- Download Video ----------
 @app.route("/api/download", methods=["GET"])
@@ -59,6 +89,7 @@ def download_video():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+
 # ---------- Download Audio ----------
 @app.route("/api/audio", methods=["GET"])
 def download_audio():
@@ -74,6 +105,7 @@ def download_audio():
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
 
 # ---------- Run on Railway ----------
 if __name__ == "__main__":
