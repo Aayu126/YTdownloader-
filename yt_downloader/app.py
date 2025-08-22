@@ -4,17 +4,25 @@ import os
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
+# Downloads folder
 DOWNLOAD_FOLDER = './downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-@app.route('/')
+# ---------- Main Website ----------
+@app.route("/")
 def home():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/api/videoInfo', methods=['GET'])
+# ---------- Health Check ----------
+@app.route("/api/health")
+def health():
+    return {"status": "ok"}
+
+# ---------- Get Video Info ----------
+@app.route("/api/videoInfo", methods=["GET"])
 def get_video_info():
-    url = request.args.get('url')
+    url = request.args.get("url")
     try:
         yt = YouTube(url)
         video_details = {
@@ -24,7 +32,7 @@ def get_video_info():
             "viewCount": yt.views,
             "thumbnails": [{"url": yt.thumbnail_url}]
         }
-        formats = yt.streams.filter(progressive=True, file_extension="mp4").order_by('resolution').desc()
+        formats = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc()
         formats = [f.itag for f in formats]
 
         return jsonify({
@@ -34,33 +42,40 @@ def get_video_info():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@app.route('/api/download', methods=['GET'])
+# ---------- Download Video ----------
+@app.route("/api/download", methods=["GET"])
 def download_video():
-    video_id = request.args.get('videoId')
-    itag = request.args.get('itag')
-    title = request.args.get('title', 'video')
+    video_id = request.args.get("videoId")
+    itag = request.args.get("itag")
+    title = request.args.get("title", "video")
 
     try:
-        yt = YouTube(f'https://youtube.com/watch?v={video_id}')
+        yt = YouTube(f"https://youtube.com/watch?v={video_id}")
         stream = yt.streams.get_by_itag(itag)
         safe_title = "".join([c if c.isalnum() else "_" for c in title])
-        file_path = os.path.join(DOWNLOAD_FOLDER, f'{safe_title}.mp4')
-        stream.download(output_path=DOWNLOAD_FOLDER, filename=f'{safe_title}.mp4')
+        file_path = os.path.join(DOWNLOAD_FOLDER, f"{safe_title}.mp4")
+        stream.download(output_path=DOWNLOAD_FOLDER, filename=f"{safe_title}.mp4")
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-@app.route('/api/audio', methods=['GET'])
+# ---------- Download Audio ----------
+@app.route("/api/audio", methods=["GET"])
 def download_audio():
-    video_id = request.args.get('videoId')
-    title = request.args.get('title', 'audio')
+    video_id = request.args.get("videoId")
+    title = request.args.get("title", "audio")
 
     try:
-        yt = YouTube(f'https://youtube.com/watch?v={video_id}')
+        yt = YouTube(f"https://youtube.com/watch?v={video_id}")
         stream = yt.streams.filter(only_audio=True).first()
         safe_title = "".join([c if c.isalnum() else "_" for c in title])
-        file_path = os.path.join(DOWNLOAD_FOLDER, f'{safe_title}.mp3')
-        stream.download(output_path=DOWNLOAD_FOLDER, filename=f'{safe_title}.mp3')
+        file_path = os.path.join(DOWNLOAD_FOLDER, f"{safe_title}.mp3")
+        stream.download(output_path=DOWNLOAD_FOLDER, filename=f"{safe_title}.mp3")
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+# ---------- Run on Railway ----------
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
