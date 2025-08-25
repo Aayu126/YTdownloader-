@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, send_file, jsonify
 from pytube import YouTube
 import pytube.request as pytube_request
 import os
+import re
 
 # ✅ Patch User-Agent only if the attribute exists
 if hasattr(pytube_request, "default_headers"):
@@ -18,22 +19,21 @@ DOWNLOAD_FOLDER = './downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-# Helper to normalize YouTube links
 def normalize_url(url: str) -> str:
     """
-    Convert YouTube URLs (shorts, youtu.be) into standard /watch?v= form.
+    Convert any YouTube URL (shorts, youtu.be, etc.) to standard /watch?v= form.
     """
-    if "youtube.com/shorts/" in url:
-        url = url.replace("youtube.com/shorts/", "youtube.com/watch?v=")
-    if "youtu.be/" in url:
-        url = url.replace("youtu.be/", "youtube.com/watch?v=")
+    url = url.strip()
+    # Extract video ID from various formats
+    match = re.search(r"(?:v=|\/shorts\/|youtu\.be\/)([A-Za-z0-9_-]{11})", url)
+    video_id = match.group(1) if match else None
+    if video_id:
+        return f"https://youtube.com/watch?v={video_id}"
     return url
-
 
 @app.route('/')
 def home():
     return render_template('index.html')
-
 
 @app.route('/api/videoInfo', methods=['GET'])
 def get_video_info():
@@ -64,7 +64,6 @@ def get_video_info():
     except Exception as e:
         return jsonify({"error": f"YouTube rejected the request: {str(e)}"}), 400
 
-
 @app.route('/api/download', methods=['GET'])
 def download_video():
     video_id = request.args.get('videoId')
@@ -82,7 +81,6 @@ def download_video():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 @app.route('/api/audio', methods=['GET'])
 def download_audio():
     video_id = request.args.get('videoId')
@@ -99,12 +97,10 @@ def download_audio():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
 # Health check route
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"})
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
