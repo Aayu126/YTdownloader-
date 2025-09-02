@@ -10,11 +10,14 @@ DOWNLOAD_FOLDER = './downloads'
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
+# ✅ If YT_COOKIES env var is set, save it to cookies.txt
+COOKIE_FILE = "cookies.txt"
+if os.getenv("YT_COOKIES"):
+    with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+        f.write(os.getenv("YT_COOKIES"))
+
 # Helper function to normalize YouTube URLs to a standard format.
 def normalize_url(url: str) -> str:
-    """
-    Converts YouTube URLs (shorts, youtu.be) into the standard /watch?v= format.
-    """
     if "youtube.com/shorts/" in url:
         url = url.replace("youtube.com/shorts/", "youtube.com/watch?v=")
     if "youtu.be/" in url:
@@ -34,7 +37,11 @@ def home():
 def get_video_info():
     url = request.args.get('url')
     try:
-        ydl_opts = {"quiet": True, "noplaylist": True}
+        ydl_opts = {
+            "quiet": True,
+            "noplaylist": True,
+            "cookiefile": COOKIE_FILE if os.path.exists(COOKIE_FILE) else None
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(normalize_url(url), download=False)
 
@@ -78,7 +85,8 @@ def download_video():
 
         ydl_opts = {
             "format": "best[ext=mp4]",
-            "outtmpl": file_path
+            "outtmpl": file_path,
+            "cookiefile": COOKIE_FILE if os.path.exists(COOKIE_FILE) else None
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -102,6 +110,7 @@ def download_audio():
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": file_path,
+            "cookiefile": COOKIE_FILE if os.path.exists(COOKIE_FILE) else None,
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
@@ -125,5 +134,4 @@ def health():
 
 
 if __name__ == '__main__':
-    # Run the application on the port specified by the environment variable.
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
