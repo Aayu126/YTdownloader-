@@ -46,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       currentVideoDetails = data;
 
-      // thumbnails can be array or string; handle both safely
       const thumb = Array.isArray(data.videoDetails.thumbnails) && data.videoDetails.thumbnails.length
         ? data.videoDetails.thumbnails[data.videoDetails.thumbnails.length - 1].url
         : (typeof data.videoDetails.thumbnails === 'string' ? data.videoDetails.thumbnails : '');
@@ -140,5 +139,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const mm = String(m).padStart(2, '0');
     const ss = String(s).padStart(2, '0');
     return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  }
+
+  // ------------------ FAQ Accordion ------------------
+  document.querySelectorAll(".faq-question").forEach((question) => {
+    question.addEventListener("click", () => {
+      const answer = question.nextElementSibling;
+      const icon = question.querySelector("i");
+
+      // Close others
+      document.querySelectorAll(".faq-answer").forEach((ans) => {
+        if (ans !== answer) {
+          ans.classList.remove("active");
+          ans.style.maxHeight = null;
+          const otherIcon = ans.previousElementSibling.querySelector("i");
+          if (otherIcon) {
+            otherIcon.classList.remove("fa-chevron-up");
+            otherIcon.classList.add("fa-chevron-down");
+          }
+        }
+      });
+
+      // Toggle current
+      if (answer.classList.contains("active")) {
+        answer.classList.remove("active");
+        answer.style.maxHeight = null;
+        icon.classList.remove("fa-chevron-up");
+        icon.classList.add("fa-chevron-down");
+      } else {
+        answer.classList.add("active");
+        answer.style.maxHeight = answer.scrollHeight + "px";
+        icon.classList.remove("fa-chevron-down");
+        icon.classList.add("fa-chevron-up");
+      }
+    });
+  });
+
+  // ------------------ Mobile Menu ------------------
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const mainNav = document.getElementById('mainNav').querySelector('ul');
+
+  if (mobileMenuBtn && mainNav) {
+    mobileMenuBtn.addEventListener('click', () => {
+      mainNav.classList.toggle('active');
+    });
   }
 });

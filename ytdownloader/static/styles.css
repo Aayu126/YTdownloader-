@@ -17,6 +17,10 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+html {
+    scroll-behavior: smooth; /* ✅ Smooth scrolling */
+}
+
 body {
     background-color: #f5f5f5;
     color: var(--dark);
@@ -368,6 +372,7 @@ nav a:hover {
     display: none;
 }
 
+/* ---------------- FAQ ---------------- */
 .faq {
     padding: 3rem 0;
 }
@@ -403,9 +408,10 @@ nav a:hover {
 
 .faq-answer.active {
     padding: 0 20px 15px;
-    max-height: 200px;
+    max-height: 1000px; /* ✅ bigger for longer answers */
 }
 
+/* ---------------- Footer ---------------- */
 footer {
     background-color: var(--dark);
     color: white;
@@ -481,6 +487,7 @@ footer {
     background-color: var(--primary);
 }
 
+/* ---------------- Mobile Menu ---------------- */
 .mobile-menu-btn {
     display: none;
     background: none;
@@ -490,54 +497,15 @@ footer {
     cursor: pointer;
 }
 
-/* URL example tooltip */
-.tooltip-container {
-    margin-top: 15px;
-    text-align: center;
-}
-
-.tooltip-text {
-    color: #777;
-    font-size: 14px;
-    font-style: italic;
-}
-
-/* Quality badge styles */
-.quality-badge {
-    background-color: #f2f2f2;
-    color: #333;
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-size: 12px;
-    margin-right: 8px;
-    font-weight: 500;
-}
-
-.quality-badge.hd {
-    background-color: var(--info);
-    color: white;
-}
-
-.quality-badge.fullhd {
-    background-color: var(--success);
-    color: white;
-}
-
-.quality-badge.audio {
-    background-color: var(--warning);
-    color: #333;
-}
-
-/* Responsive styles */
 @media (max-width: 992px) {
     .video-info {
         flex-direction: column;
     }
-    
+
     .thumbnail {
         width: 100%;
         height: 0;
-        padding-bottom: 56.25%; /* 16:9 aspect ratio */
+        padding-bottom: 56.25%;
     }
 }
 
@@ -553,23 +521,23 @@ footer {
         padding: 20px;
         box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
     }
-    
+
     nav ul.active {
         display: flex;
     }
-    
+
     .mobile-menu-btn {
         display: block;
     }
-    
+
     .hero h1 {
         font-size: 2rem;
     }
-    
+
     .features-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .format-options {
         flex-wrap: wrap;
     }
@@ -588,162 +556,4 @@ footer {
         font-size: 13px;
         padding: 8px 10px;
     }
-
-}
-
-/* Dark mode styles */
-.dark-mode {
-    background-color: #121212;
-    color: #f5f5f5;
-}
-
-.dark-mode .feature-card,
-.dark-mode .search-container,
-.dark-mode .video-details,
-.dark-mode .faq-item {
-    background-color: #1e1e1e;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-}
-
-.dark-mode .format-option {
-    background-color: #333;
-    color: #f5f5f5;
-}
-
-.dark-mode .input-group input {
-    background-color: #333;
-    border-color: #444;
-    color: #f5f5f5;
-}
-
-.dark-mode .info-text p,
-.dark-mode .section-title p {
-    color: #bbb;
-}
-
-/* Additional animation for UI elements */
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.fade-in {
-    animation: fadeIn 0.5s ease forwards;
-}
-
-/* Toast notification styles */
-.toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background-color: var(--success);
-    color: white;
-    padding: 12px 20px;
-    border-radius: 5px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    z-index: 1000;
-    transform: translateY(100px);
-    opacity: 0;
-    transition: transform 0.3s, opacity 0.3s;
-}
-
-.toast.show {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-.toast.error {
-    background-color: var(--danger);
-}
-
-/* Progress bar styles */
-.progress-container {
-    width: 100%;
-    background-color: #f0f0f0;
-    border-radius: 5px;
-    margin-top: 15px;
-    overflow: hidden;
-    display: none;
-}
-
-.progress-bar {
-    height: 10px;
-    background-color: var(--primary);
-    width: 0%;
-    transition: width 0.3s;
-}
-
-/* Theme toggle switch */
-.theme-switch {
-    position: relative;
-    display: inline-block;
-    width: 60px;
-    height: 30px;
-}
-
-.theme-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    transition: .4s;
-    border-radius: 34px;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 22px;
-    width: 22px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    transition: .4s;
-    border-radius: 50%;
-}
-
-input:checked + .slider {
-    background-color: var(--primary);
-}
-
-input:checked + .slider:before {
-    transform: translateX(30px);
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-    width: 10px;
-}
-
-::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-.speed-label {
-    font-size: 0.8em;
-    font-weight: normal;
-    color: #ccc;
-    margin-left: 8px;
-    opacity: 0.9;
 }
