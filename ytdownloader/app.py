@@ -13,8 +13,9 @@ if not os.path.exists(DOWNLOAD_FOLDER):
 # ✅ If YT_COOKIES env var is set, save it to cookies.txt
 COOKIE_FILE = "cookies.txt"
 if os.getenv("YT_COOKIES"):
-    with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+    with open("cookies.txt", "w", encoding="utf-8") as f:
         f.write(os.getenv("YT_COOKIES"))
+
 
 # Helper function to normalize YouTube URLs to a standard format.
 def normalize_url(url: str) -> str:
@@ -40,7 +41,7 @@ def get_video_info():
         ydl_opts = {
             "quiet": True,
             "noplaylist": True,
-            "cookiefile": COOKIE_FILE if os.path.exists(COOKIE_FILE) else None
+            "cookiefile": "cookies.txt" if os.path.exists("cookies.txt") else None
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(normalize_url(url), download=False)
